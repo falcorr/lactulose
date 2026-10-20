@@ -26,10 +26,10 @@ private const val METRES_PER_DEGREE = 111_320.0
 const val MIN_BLUR_M = 50.0
 const val MAX_BLUR_M = 100.0
 
-// The directions the offset may take, as compass bearings in degrees clockwise from north: from just south of
-// east, through south, to just north of west, as the user drew it (20/10/2026); never northward.
-const val MIN_BLUR_BEARING = 95.0
-const val MAX_BLUR_BEARING = 285.0
+// The directions the offset may take, as compass bearings in degrees clockwise from north: 110° (east-south-east)
+// through south to 270° (west), as the user set it (20/10/2026); never northward.
+const val MIN_BLUR_BEARING = 110.0
+const val MAX_BLUR_BEARING = 270.0
 
 
 // Returns the point metres away from (lat, lon) in the direction bearingRad (0 = north, clockwise).

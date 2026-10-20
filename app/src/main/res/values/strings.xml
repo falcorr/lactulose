@@ -33,7 +33,7 @@
   <string name="outage_settings_help">The point is kept only on this phone and sent nowhere; the app downloads Essential Energy\'s whole outage maps and checks them here.</string>
   <string name="outage_name_label">Name to show (optional)</string>
   <string name="outage_point_label">Point as latitude, longitude</string>
-  <string name="outage_use_phone">Use phone location (moved 50–100 m, east through south to west)</string>
+  <string name="outage_use_phone">Use phone location (moved 50–100 m, bearing 110°–270°)</string>
   <string name="outage_use_place">Use centre of %1$s</string>
   <string name="outage_allow_location">Allow location, then tap Use phone location again.</string>
   <string name="outage_clear">Clear</string>

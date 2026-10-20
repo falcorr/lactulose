@@ -176,8 +176,8 @@ class DataTest
     val random = kotlin.random.Random(7)
     val bearings = HashSet<Int>()
 
-    // BoM's Dubbo point, moved many times: always 50 to 100 m away (great-circle distance), at bearings from 95°
-    // through south to 285°, spread across that whole arc.
+    // BoM's Dubbo point, moved many times: always 50 to 100 m away (great-circle distance), at bearings from 110°
+    // through south to 270°, spread across that whole arc.
     for (i in 0 until 500)
     {
       val moved = com.falcorr.lactulose.core.blurPoint(-32.2202, 148.5736, random)
@@ -190,8 +190,8 @@ class DataTest
       assertTrue("moved $metres m", metres in 49.5..100.5)
       val bearing = (Math.toDegrees(Math.atan2(dLon * Math.cos(Math.toRadians(-32.2202)), dLat)) + 360) % 360
 
-      assertTrue("bearing $bearing", bearing in 94.9..285.1)
-      bearings.add(((bearing - 95) / 19).toInt())
+      assertTrue("bearing $bearing", bearing in 109.9..270.1)
+      bearings.add(((bearing - 110) / 16).toInt())
     }
     assertEquals(10, bearings.size)
   }
