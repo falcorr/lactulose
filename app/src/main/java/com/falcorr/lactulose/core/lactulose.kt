@@ -1,16 +1,14 @@
 // 20/10/2026 created by Claude Opus 5.5
 // 20/10/2026 last modified by Claude Opus 5.5
 // lactulose.kt
-// The lactulose dose rule (user, 20/10/2026): the floor (floor temperature, floor dose) is itself the first point
-// of the curve, followed by the user's points above the floor temperature, interpolated in straight lines and
-// extended past the ends along the end segments, so the curve can be made nonlinear by editing points. Points at
-// or below the floor temperature are replaced by the floor. The defaults are the user's points (15 °C 0.3 mL,
-// 20 °C 0.4 mL ... 50 °C 1.0 mL). Changing the floor dose therefore bends the curve smoothly up to the next point
-// rather than flattening it. The temperature dose never goes below the floor dose; below the floor temperature the
-// floor temperature counts instead. The feels-like dose uses a floor temperature lowered by how far feels-like is
-// below the temperature at each moment and follows the same curve, continued below the floor along its first
-// segment, so it may go below the floor dose (never below zero) and moves with the floor dose. A window's dose is the mean of each moment's dose, plus a
-// user-set offset (0.00 to 1.00 mL) added to both doses. Works for any floor temperature, including below zero.
+// The lactulose dose rule (user, 20/10/2026). The temperature dose follows the user's points (defaults 15 °C 0.3 mL,
+// 20 °C 0.4 mL ... 50 °C 1.0 mL), interpolated in straight lines and extended past the ends along the end segments.
+// The floor applies to the temperature dose only: below the floor temperature the floor temperature counts, and it
+// is never less than the floor dose. The feels-like dose is not floored; at each moment it is the temperature dose
+// plus an offset, what the points give for feels-like minus temperature at that moment (negative when feels-like
+// is colder, positive when warmer), never below zero. So any change to the temperature dose, such as a new
+// floor dose, moves the feels-like dose by the same amount. A window's dose is the mean of each moment's dose, plus
+// a user-set offset (0.00 to 1.00 mL) added to both doses. Works for any floor temperature, including below zero.
 package com.falcorr.lactulose.core
 
 import java.util.Locale
@@ -46,21 +44,9 @@ class DoseRule(
   val offsetMl: Double = 0.0
 )
 {
-  // The curve's points: the floor, then the points above the floor temperature. With none above it, a point 5 °C
-  // higher continues at the points' last slope (or level if they give none).
-  private val curve: List<Pair<Double, Double>> = run {
-    val above = points.filter { it.first > floorC }
-    val slope = if (points.size >= 2) (points.last().second - points[points.size - 2].second) /
-      (points.last().first - points[points.size - 2].first) else 0.0
-
-    listOf(Pair(floorC, floorMl)) + above.ifEmpty { listOf(Pair(floorC + 5.0, floorMl + 5.0 * slope)) }
-  }
-
-
-  // Returns the curve's dose at celsius: straight lines between points, and past either end along the end segment.
+  // Returns the points' dose at celsius: straight lines between points, and past either end along the end segment.
   fun curveMl(celsius: Double): Double
   {
-    val points = curve
     var i = 1
 
     while (i < points.size - 1 && celsius > points[i].first) i++
@@ -69,9 +55,23 @@ class DoseRule(
   }
 
 
-  // Returns the dose in mL for one temperature, or NaN when unknown.
+  // Returns the temperature dose in mL for one temperature, or NaN when unknown.
   fun doseMl(celsius: Double): Double =
     if (celsius.isNaN()) Double.NaN else maxOf(floorMl, curveMl(maxOf(celsius, floorC)))
+
+
+  // Returns the feels-like dose in mL for one moment's temperature and feels-like, or NaN when either is unknown:
+  // the temperature dose plus an offset, the points' change across the feels-like minus temperature difference
+  // measured from the temperature the temperature dose used (negative when feels-like is colder, positive when
+  // warmer), never below zero.
+  fun feelsDoseMl(temp: Double, feels: Double): Double
+  {
+    val used = maxOf(temp, floorC)
+    val offset = curveMl(used + (feels - temp)) - curveMl(used)
+
+    if (temp.isNaN() || feels.isNaN()) return Double.NaN
+    return maxOf(0.0, doseMl(temp) + offset)
+  }
 
 
   // Returns the mean dose over series' temperatures between startMs and endMs plus the offset, or NaN when the
@@ -80,22 +80,11 @@ class DoseRule(
     meanOver(startMs, endMs) { doseMl(series.valueAt(series.temps, it)) } + offsetMl
 
 
-  // Returns the mean dose over series' feels-like between startMs and endMs plus the offset. At each moment
-  // feels-like is held no lower than the floor temperature minus that moment's gap between temperature and
-  // feels-like, which is the same as adding the amount temperature is below the floor; feelsDoseMl gives its dose.
+  // Returns the mean feels-like dose over series between startMs and endMs plus the offset, or NaN when the window
+  // isn't covered.
   fun doseByFeel(series: TempSeries, startMs: Long, endMs: Long): Double =
-    meanOver(startMs, endMs) {
-      val temp = series.valueAt(series.temps, it)
-      val feels = series.valueAt(series.feels, it)
-
-      if (temp.isNaN() || feels.isNaN()) Double.NaN else feelsDoseMl(feels + maxOf(0.0, floorC - temp))
-    } + offsetMl
-
-
-  // Returns the by-feel dose for an adjusted feels-like of celsius: at or above the floor temperature the same as
-  // the temperature dose; below it the curve continued below the floor, never below zero.
-  fun feelsDoseMl(celsius: Double): Double =
-    if (celsius >= floorC) doseMl(celsius) else maxOf(0.0, curveMl(celsius))
+    meanOver(startMs, endMs) { feelsDoseMl(series.valueAt(series.temps, it), series.valueAt(series.feels, it)) } +
+      offsetMl
 
 
   // Returns the mean of dose sampled at the middle of each DOSE_STEP_MS step from startMs to endMs; NaN if any is.

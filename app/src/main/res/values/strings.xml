@@ -14,7 +14,7 @@
   <string name="dose_by_temp">%1$s by temp</string>
   <string name="dose_by_feel">%1$s by feel</string>
   <string name="dose_settings">Lactulose dose</string>
-  <string name="dose_settings_help">The floor (temperature and dose) is the first point; the dose then follows the points above it in straight lines, never less than the floor dose. Below the floor temperature the floor counts. By feel, the floor temperature is lowered by how far feels-like is below the temperature, and the line continues below the floor dose. The window dose is the average of every minute\'s dose, plus the offset.</string>
+  <string name="dose_settings_help">By temp, the dose follows the points in straight lines. Below the floor temperature the floor temperature counts, and it is never less than the floor dose. By feel, the floor doesn\'t apply: it is the by-temp dose plus an offset, what the points give for feels-like minus temperature at each minute (negative when feels-like is colder). The window dose is the average of every minute\'s dose, plus the amount added to both doses.</string>
   <string name="floor_temp_label">Floor temperature (°C)</string>
   <string name="floor_dose_label">Dose at the floor (mL)</string>
   <string name="dose_points_label">Dose points, one per line: °C then mL</string>

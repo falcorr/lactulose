@@ -10,6 +10,7 @@ import com.falcorr.lactulose.core.TempSeries
 import com.falcorr.lactulose.core.WINDOW_MS
 import com.falcorr.lactulose.core.floorLocal
 import com.falcorr.lactulose.core.DoseRule
+import com.falcorr.lactulose.core.DEFAULT_DOSE_POINTS
 import com.falcorr.lactulose.core.formatMl
 import com.falcorr.lactulose.core.latestWindowStart
 import com.falcorr.lactulose.core.snapWindowStart
@@ -106,13 +107,14 @@ class CoreTest
     assertEquals("0.90mL", formatMl(DoseRule(19.0, 0.9).doseMl(23.5)))
     assertEquals("0.90mL", formatMl(DoseRule(19.0, 0.9).doseMl(45.0)))
     assertEquals("1.00mL", formatMl(DoseRule(19.0, 0.9).doseMl(50.0)))
-    // A higher floor with a small floor dose: the floor is the first point, then the points above it.
-    assertEquals(0.2, DoseRule(20.0, 0.2).doseMl(10.0), 1e-9)
-    assertEquals(0.35, DoseRule(20.0, 0.2).doseMl(22.5), 1e-9)
+    // A higher floor with a small floor dose: below the floor temperature the floor temperature counts, and the
+    // floor dose is only a minimum, so the points still decide (0.4 mL at 20 °C).
+    assertEquals(0.4, DoseRule(20.0, 0.2).doseMl(10.0), 1e-9)
+    assertEquals(0.45, DoseRule(20.0, 0.2).doseMl(22.5), 1e-9)
     assertEquals(0.5, DoseRule(20.0, 0.2).doseMl(25.0), 1e-9)
-    // Floors below zero and the setting limits: from 0.1 mL at -15 °C straight to the 15 °C point's 0.3 mL.
+    // Floors below zero and the setting limits: the points extended down, never below the floor dose.
     assertEquals(0.1, DoseRule(-15.0, 0.1).doseMl(-20.0), 1e-9)
-    assertEquals(0.1 + 0.2 * 25 / 30, DoseRule(-15.0, 0.1).doseMl(10.0), 1e-9)
+    assertEquals(0.2, DoseRule(-15.0, 0.1).doseMl(10.0), 1e-9)
     assertEquals(3.0, DoseRule(50.0, 3.0).doseMl(50.0), 1e-9)
     assertEquals(3.0, DoseRule(-15.0, 3.0).doseMl(50.0), 1e-9)
   }
@@ -138,7 +140,7 @@ class CoreTest
 
 
   @Test
-  fun feelsDoseLowersTheFloorByTheGap()
+  fun feelsDoseIsTheTempDoseOffsetByTheGap()
   {
     val base = 1_800_000_000_000L
     // Flat series over the window: temperature T and feels-like F throughout.
@@ -146,36 +148,68 @@ class CoreTest
       doubleArrayOf(t, t), doubleArrayOf(f, f)) }
     val rule = DoseRule()
 
-    // Above the floor the feels-like value is used as is (35 °C feels gives 0.7 mL).
-    assertEquals(0.7, rule.doseByFeel(flat(40.0, 35.0), base, base + WINDOW_MS), 1e-9)
+    // Above the floor: 0.8 mL by temp at 40 °C, and 5 °C colder by feel is 0.1 mL less.
     assertEquals(0.8, rule.doseByTemp(flat(40.0, 35.0), base, base + WINDOW_MS), 1e-9)
-    // Temperature 10 °C, feels 2 °C: the feels floor is 15 - 8 = 7 °C, which may go below the floor dose.
+    assertEquals(0.7, rule.doseByFeel(flat(40.0, 35.0), base, base + WINDOW_MS), 1e-9)
+    // Feels-like warmer than the temperature raises the by-feel dose.
+    assertEquals(0.84, rule.doseByFeel(flat(40.0, 42.0), base, base + WINDOW_MS), 1e-9)
+    // Temperature 10 °C, feels 2 °C: by temp the floor 0.3 mL; by feel 8 °C of points lower, 0.14 mL, below the
+    // floor dose because the floor doesn't apply to it.
+    assertEquals(0.3, rule.doseByTemp(flat(10.0, 2.0), base, base + WINDOW_MS), 1e-9)
     assertEquals(0.14, rule.doseByFeel(flat(10.0, 2.0), base, base + WINDOW_MS), 1e-9)
-    // Floor 10 °C at 0.1 mL: the curve runs 0.1 mL at 10 °C to 0.3 mL at 15 °C. Temperature 5, feels 2 gives a
-    // feels floor of 7 °C, where that line reaches -0.02 mL, so 0 mL; by temp the floor dose, 0.1 mL.
-    assertEquals(0.0, DoseRule(10.0, 0.1).doseByFeel(flat(5.0, 2.0), base, base + WINDOW_MS), 1e-9)
-    assertEquals(0.1, DoseRule(10.0, 0.1).doseByTemp(flat(5.0, 2.0), base, base + WINDOW_MS), 1e-9)
-    assertEquals(0.2, DoseRule(10.0, 0.1).doseByTemp(flat(12.5, 12.5), base, base + WINDOW_MS), 1e-9)
+    // Floor 10 °C at 0.1 mL: the points give 0.2 mL at 10 °C, so by temp 0.2 mL, and by feel 3 °C lower 0.14 mL.
+    assertEquals(0.2, DoseRule(10.0, 0.1).doseByTemp(flat(5.0, 2.0), base, base + WINDOW_MS), 1e-9)
+    assertEquals(0.14, DoseRule(10.0, 0.1).doseByFeel(flat(5.0, 2.0), base, base + WINDOW_MS), 1e-9)
     // Nonlinear points are followed between and beyond them.
     val curve = DoseRule(15.0, 0.3, listOf(Pair(15.0, 0.3), Pair(25.0, 0.4), Pair(35.0, 1.0)))
     assertEquals(0.35, curve.doseMl(20.0), 1e-9)
     assertEquals(0.7, curve.doseMl(30.0), 1e-9)
     assertEquals(1.3, curve.doseMl(40.0), 1e-9)
-    // The user's example floor (19 °C, 0.9 mL): both stay at the floor dose while feels-like is above the floor
-    // temperature, until the points pass it.
+    // ... and the gap is measured along them: 30 °C feeling 20 °C drops 0.7 to 0.35 mL.
+    assertEquals(0.35, curve.doseByFeel(flat(30.0, 20.0), base, base + WINDOW_MS), 1e-9)
+    // The user's example floor (19 °C, 0.9 mL): by temp the floor dose; by feel 2.3 °C (0.046 mL) less.
     assertEquals(0.9, DoseRule(19.0, 0.9).doseByTemp(flat(23.5, 21.2), base, base + WINDOW_MS), 1e-9)
-    assertEquals(0.9, DoseRule(19.0, 0.9).doseByFeel(flat(23.5, 21.2), base, base + WINDOW_MS), 1e-9)
-    // The user's screenshots (20/10/2026, points 20..50 °C): with the floor dose raised from 0.30 to 0.35 mL the
-    // curve runs straight from 0.35 mL at 15 °C to 0.40 mL at 20 °C instead of staying flat at 0.35 mL to 17.5 °C,
-    // and the by-feel dose moves with it (temperature 14, feels 12: adjusted 13 °C).
-    val user = (20..50 step 5).map { Pair(it.toDouble(), it * 0.02) }
-    assertEquals(0.36, DoseRule(15.0, 0.35, user).doseMl(16.0), 1e-9)
-    assertEquals(0.38, DoseRule(15.0, 0.35, user).doseMl(18.0), 1e-9)
-    assertEquals(0.26, DoseRule(15.0, 0.3, user).doseByFeel(flat(14.0, 12.0), base, base + WINDOW_MS), 1e-9)
-    assertEquals(0.33, DoseRule(15.0, 0.35, user).doseByFeel(flat(14.0, 12.0), base, base + WINDOW_MS), 1e-9)
-    assertEquals(0.36, DoseRule(15.0, 0.35, user).doseByFeel(flat(20.0, 16.0), base, base + WINDOW_MS), 1e-9)
+    assertEquals(0.854, DoseRule(19.0, 0.9).doseByFeel(flat(23.5, 21.2), base, base + WINDOW_MS), 1e-9)
     // Never below zero, even far below the points.
     assertEquals(0.0, DoseRule(-15.0, 0.1).doseByFeel(flat(-14.0, -30.0), base, base + WINDOW_MS), 1e-9)
+  }
+
+
+  @Test
+  fun floorDoseMovesBothDosesTogether()
+  {
+    val base = 1_800_000_000_000L
+    // The user's screenshots (20/10/2026): points 20..50 °C, floor 15 °C, a window at temperature 17.1 °C and
+    // feels-like 14.9 °C. Raising the floor dose from 0.30 to 0.35 mL raised the by-temp dose but left the
+    // by-feel dose at 0.30 mL. The by-feel dose must stay the by-temp dose less 2.2 °C of points (0.044 mL).
+    val user = (20..50 step 5).map { Pair(it.toDouble(), it * 0.02) }
+    val window = TempSeries(longArrayOf(base, base + WINDOW_MS), doubleArrayOf(17.1, 17.1), doubleArrayOf(14.9, 14.9))
+    val low = DoseRule(15.0, 0.3, user)
+    val high = DoseRule(15.0, 0.35, user)
+
+    assertEquals(0.342, low.doseByTemp(window, base, base + WINDOW_MS), 1e-9)
+    assertEquals(0.298, low.doseByFeel(window, base, base + WINDOW_MS), 1e-9)
+    assertEquals(0.35, high.doseByTemp(window, base, base + WINDOW_MS), 1e-9)
+    assertEquals(0.306, high.doseByFeel(window, base, base + WINDOW_MS), 1e-9)
+    // The same for many varied windows, floors and floor doses: whenever the by-feel dose is above zero, the gap
+    // between the two doses doesn't depend on the floor dose, so both move together.
+    val random = java.util.Random(20261020L)
+    var times: LongArray
+    var temps: DoubleArray
+    var feels: DoubleArray
+
+    repeat(500) {
+      times = LongArray(8) { base + it * HOUR_MS }
+      temps = DoubleArray(8) { -5.0 + 45.0 * random.nextDouble() }
+      feels = DoubleArray(8) { temps[it] - 6.0 + 9.0 * random.nextDouble() }
+      val series = TempSeries(times, temps, feels)
+      val floorC = 5.0 + 20.0 * random.nextDouble()
+      val rules = listOf(0.1, 0.3, 0.6, 1.2).map { DoseRule(floorC, it, DEFAULT_DOSE_POINTS) }
+      val gaps = rules.map { it.doseByTemp(series, base, base + WINDOW_MS) - it.doseByFeel(series, base, base + WINDOW_MS) }
+      val lowest = (0 until 8).minOf { rules[0].feelsDoseMl(temps[it], feels[it]) }
+
+      if (lowest > 0.02) for (gap in gaps) assertEquals(gaps[0], gap, 1e-9)
+    }
   }
 
 
