@@ -62,4 +62,7 @@
   <string name="outages_failed">Outages failed: %1$s</string>
   <string name="pick_downloads">Choose or create a folder such as Download/lactulose (Android won\'t allow Download itself).</string>
   <string name="pick_sd">Now choose or create a lactulose folder on the SD card, or go back to skip it.</string>
+  <string name="refresh_failed">%1$s refresh failed at %2$s: %3$s</string>
+  <string name="weather_word">Weather</string>
+  <string name="outages_word">Outages</string>
 </resources>

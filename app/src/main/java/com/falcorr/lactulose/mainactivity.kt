@@ -101,13 +101,13 @@ private const val COLOUR_BOX_EDGE = 0x66FFB6C8
 private const val COLOUR_BOX_FILL = 0x14FFB6C8
 private const val COLOUR_WINDOW_TEXT = 0xFFFFC4D2.toInt()
 private const val COLOUR_RAIN_TEXT = 0xFF81D4FA.toInt()
+private const val COLOUR_FAIL = 0xFFEF5350.toInt()
 
-// Weather is refetched when older than this; outages less often, as the planned-outage map is large.
-// Each period gets a fresh random extra of up to REFRESH_JITTER_MS after every download, so requests don't
-// arrive on a fixed schedule.
-private const val WEATHER_REFRESH_MS = 30 * MINUTE_MS
-private const val OUTAGE_REFRESH_MS = 60 * MINUTE_MS
-private const val REFRESH_JITTER_MS = 7 * MINUTE_MS
+// Weather and outages are refetched once they are 15 minutes old or more (user, 20/10/2026). Each period gets a
+// fresh random extra of up to REFRESH_JITTER_MS after every download, so requests don't arrive on a fixed schedule.
+private const val WEATHER_REFRESH_MS = 15 * MINUTE_MS
+private const val OUTAGE_REFRESH_MS = 15 * MINUTE_MS
+private const val REFRESH_JITTER_MS = MINUTE_MS
 private const val MANUAL_REFRESH_GAP_MS = 60_000L
 private const val MANUAL_REFRESH_JITTER_MS = 8_000L
 
@@ -190,6 +190,11 @@ class MainActivity : Activity()
   private var weatherBusy = false
   private var outagesBusy = false
   private var weatherError = ""
+
+  // The last failed weather and outage refreshes, shown in red under the Refresh button until one succeeds.
+  private var weatherFailNote = ""
+  private var outageFailNote = ""
+  private lateinit var failText: TextView
 
   // Formats clock times following the phone's 12/24 h setting.
   private val timeFormat by lazy { android.text.format.DateFormat.getTimeFormat(this) }
@@ -293,6 +298,10 @@ class MainActivity : Activity()
     header.addView(updateButton)
     column.addView(header)
 
+    failText = text(11f, COLOUR_FAIL, false)
+    failText.gravity = Gravity.END
+    failText.visibility = View.GONE
+    column.addView(failText)
     statusText = text(11f, COLOUR_DIM, false)
     column.addView(statusText)
     nowText = text(14f, COLOUR_TEXT, true)
@@ -503,6 +512,8 @@ class MainActivity : Activity()
     getPreferences(MODE_PRIVATE).edit().putInt(KEY_PLACE, position).apply()
     snapshot = null
     weatherError = ""
+    weatherFailNote = ""
+    showFailures()
     weatherBusy = false
     refreshIfStale()
   }
@@ -551,6 +562,8 @@ class MainActivity : Activity()
   {
     weatherBusy = false
     weatherError = error
+    weatherFailNote = getString(R.string.refresh_failed, getString(R.string.weather_word), shortTime(), error)
+    showFailures()
     showStatus()
     mainHandler.postDelayed({ weatherError = "" }, WEATHER_REFRESH_MS)
   }
@@ -598,6 +611,8 @@ class MainActivity : Activity()
         {
           weatherBusy = false
           weatherError = ""
+          weatherFailNote = ""
+          showFailures()
           show(result.value!!)
         }
         else failWeather(result.error)
@@ -623,6 +638,8 @@ class MainActivity : Activity()
         outagesBusy = false
         outagesFetchedMs = System.currentTimeMillis() - OUTAGE_REFRESH_MS + 10 * MINUTE_MS
         outageStatus = getString(R.string.outages_failed, e.toString())
+        outageFailNote = getString(R.string.refresh_failed, getString(R.string.outages_word), shortTime(), e.toString())
+        showFailures()
         showOutages()
       }
     } }
@@ -660,6 +677,7 @@ class MainActivity : Activity()
           outagesUpdatedMs = now
           outageStatus = getString(R.string.no_outages)
           outageNote = result.error
+          outageFailNote = ""
         }
         else
         {
@@ -667,7 +685,9 @@ class MainActivity : Activity()
           if (cached == null) outagesFetchedMs = 0L
           outagesFetchedMs = maxOf(outagesFetchedMs, now - OUTAGE_REFRESH_MS + 10 * MINUTE_MS)
           outageStatus = result.error
+          outageFailNote = getString(R.string.refresh_failed, getString(R.string.outages_word), shortTime(), result.error)
         }
+        showFailures()
         showOutages()
       }
     }
@@ -703,7 +723,23 @@ class MainActivity : Activity()
   }
 
 
-  // Shows data times, the place name for phone location, recent thunder, the last error if any, and the
+  // Shows the last failed refreshes in red under the Refresh button, or hides the line when there are none. The
+  // last loaded data stays on screen either way.
+  private fun showFailures()
+  {
+    val notes = listOf(weatherFailNote, outageFailNote).filter { it.isNotEmpty() }
+
+    failText.text = notes.joinToString("\n")
+    failText.visibility = if (notes.isEmpty()) View.GONE else View.VISIBLE
+  }
+
+
+  // Returns the time now as e.g. "4:05pm", for failure notes.
+  private fun shortTime(): String =
+    timeFormat.format(System.currentTimeMillis()).replace(" ", "").lowercase()
+
+
+  // Shows data times, the place name for phone location, recent thunder, and the
   // current temperature and feels-like.
   private fun showStatus()
   {
@@ -722,7 +758,6 @@ class MainActivity : Activity()
           COLOUR_STORM)
       }
     }
-    if (weatherError.isNotEmpty()) out.append((if (out.isNotEmpty()) "\n" else "") + weatherError)
     statusText.text = out
     appendColoured(now, getString(R.string.temp_label) + " " + oneDecimal(data?.nowTemp ?: Double.NaN), COLOUR_TEMP)
     now.append("\n")

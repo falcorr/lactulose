@@ -14,6 +14,7 @@ import com.falcorr.lactulose.core.HOUR_MS
 import com.falcorr.lactulose.core.HourlyExtras
 import com.falcorr.lactulose.core.TempSeries
 import com.falcorr.lactulose.core.WeatherSnapshot
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.Robolectric
@@ -103,6 +104,12 @@ class ScreenshotTest
       as android.widget.Button).performClick()
     org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle()
     save(activity.window.decorView, 2280, if (live) "main-live-values.png" else "main-values.png")
+    // A failed refresh: the red note appears under Refresh and the loaded data stays.
+    MainActivity::class.java.getDeclaredMethod("failWeather", String::class.java).apply { isAccessible = true }
+      .invoke(activity, "HTTP 503")
+    org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle()
+    assertTrue(loaded(activity, "snapshot"))
+    save(activity.window.decorView, 1100, if (live) "main-live-failed.png" else "main-failed.png")
   }
 
 
