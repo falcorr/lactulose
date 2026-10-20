@@ -121,6 +121,11 @@ class ScreenshotTest
     org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle()
     assertTrue(loaded(activity, "snapshot"))
     save(activity.window.decorView, 1100, if (live) "main-live-failed.png" else "main-failed.png")
+    // The dose settings dialog, opened by tapping the lactulose box.
+    MainActivity::class.java.getDeclaredMethod("showDoseSettings").apply { isAccessible = true }.invoke(activity)
+    org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle()
+    saveDialog(org.robolectric.shadows.ShadowDialog.getLatestDialog(), if (live) "dose-live.png" else "dose.png")
+    org.robolectric.shadows.ShadowDialog.getLatestDialog().dismiss()
     // The outage place dialog, opened by long-pressing the outage list.
     MainActivity::class.java.getDeclaredMethod("showOutageSettings").apply { isAccessible = true }.invoke(activity)
     org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle()

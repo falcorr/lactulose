@@ -106,12 +106,13 @@ class CoreTest
     assertEquals("0.90mL", formatMl(DoseRule(19.0, 0.9).doseMl(23.5)))
     assertEquals("0.90mL", formatMl(DoseRule(19.0, 0.9).doseMl(45.0)))
     assertEquals("1.00mL", formatMl(DoseRule(19.0, 0.9).doseMl(50.0)))
-    // A higher floor with a small floor dose: the points apply from the floor temperature.
-    assertEquals(0.4, DoseRule(20.0, 0.2).doseMl(10.0), 1e-9)
+    // A higher floor with a small floor dose: the floor is the first point, then the points above it.
+    assertEquals(0.2, DoseRule(20.0, 0.2).doseMl(10.0), 1e-9)
+    assertEquals(0.35, DoseRule(20.0, 0.2).doseMl(22.5), 1e-9)
     assertEquals(0.5, DoseRule(20.0, 0.2).doseMl(25.0), 1e-9)
-    // Floors below zero and the setting limits.
+    // Floors below zero and the setting limits: from 0.1 mL at -15 °C straight to the 15 °C point's 0.3 mL.
     assertEquals(0.1, DoseRule(-15.0, 0.1).doseMl(-20.0), 1e-9)
-    assertEquals(0.2, DoseRule(-15.0, 0.1).doseMl(10.0), 1e-9)
+    assertEquals(0.1 + 0.2 * 25 / 30, DoseRule(-15.0, 0.1).doseMl(10.0), 1e-9)
     assertEquals(3.0, DoseRule(50.0, 3.0).doseMl(50.0), 1e-9)
     assertEquals(3.0, DoseRule(-15.0, 3.0).doseMl(50.0), 1e-9)
   }
@@ -150,18 +151,29 @@ class CoreTest
     assertEquals(0.8, rule.doseByTemp(flat(40.0, 35.0), base, base + WINDOW_MS), 1e-9)
     // Temperature 10 °C, feels 2 °C: the feels floor is 15 - 8 = 7 °C, which may go below the floor dose.
     assertEquals(0.14, rule.doseByFeel(flat(10.0, 2.0), base, base + WINDOW_MS), 1e-9)
-    // Floor 10 °C at 0.1 mL: temperature 5, feels 2 gives a feels floor of 7 °C, 0.14 mL; by temp 0.2 mL.
-    assertEquals(0.14, DoseRule(10.0, 0.1).doseByFeel(flat(5.0, 2.0), base, base + WINDOW_MS), 1e-9)
-    assertEquals(0.2, DoseRule(10.0, 0.1).doseByTemp(flat(5.0, 2.0), base, base + WINDOW_MS), 1e-9)
+    // Floor 10 °C at 0.1 mL: the curve runs 0.1 mL at 10 °C to 0.3 mL at 15 °C. Temperature 5, feels 2 gives a
+    // feels floor of 7 °C, where that line reaches -0.02 mL, so 0 mL; by temp the floor dose, 0.1 mL.
+    assertEquals(0.0, DoseRule(10.0, 0.1).doseByFeel(flat(5.0, 2.0), base, base + WINDOW_MS), 1e-9)
+    assertEquals(0.1, DoseRule(10.0, 0.1).doseByTemp(flat(5.0, 2.0), base, base + WINDOW_MS), 1e-9)
+    assertEquals(0.2, DoseRule(10.0, 0.1).doseByTemp(flat(12.5, 12.5), base, base + WINDOW_MS), 1e-9)
     // Nonlinear points are followed between and beyond them.
     val curve = DoseRule(15.0, 0.3, listOf(Pair(15.0, 0.3), Pair(25.0, 0.4), Pair(35.0, 1.0)))
     assertEquals(0.35, curve.doseMl(20.0), 1e-9)
     assertEquals(0.7, curve.doseMl(30.0), 1e-9)
     assertEquals(1.3, curve.doseMl(40.0), 1e-9)
-    // The user's example floor (19 °C, 0.9 mL): by temp stays at the floor dose until the points pass it, while
-    // by feel follows the points.
+    // The user's example floor (19 °C, 0.9 mL): both stay at the floor dose while feels-like is above the floor
+    // temperature, until the points pass it.
     assertEquals(0.9, DoseRule(19.0, 0.9).doseByTemp(flat(23.5, 21.2), base, base + WINDOW_MS), 1e-9)
-    assertEquals(0.424, DoseRule(19.0, 0.9).doseByFeel(flat(23.5, 21.2), base, base + WINDOW_MS), 1e-9)
+    assertEquals(0.9, DoseRule(19.0, 0.9).doseByFeel(flat(23.5, 21.2), base, base + WINDOW_MS), 1e-9)
+    // The user's screenshots (20/10/2026, points 20..50 °C): with the floor dose raised from 0.30 to 0.35 mL the
+    // curve runs straight from 0.35 mL at 15 °C to 0.40 mL at 20 °C instead of staying flat at 0.35 mL to 17.5 °C,
+    // and the by-feel dose moves with it (temperature 14, feels 12: adjusted 13 °C).
+    val user = (20..50 step 5).map { Pair(it.toDouble(), it * 0.02) }
+    assertEquals(0.36, DoseRule(15.0, 0.35, user).doseMl(16.0), 1e-9)
+    assertEquals(0.38, DoseRule(15.0, 0.35, user).doseMl(18.0), 1e-9)
+    assertEquals(0.26, DoseRule(15.0, 0.3, user).doseByFeel(flat(14.0, 12.0), base, base + WINDOW_MS), 1e-9)
+    assertEquals(0.33, DoseRule(15.0, 0.35, user).doseByFeel(flat(14.0, 12.0), base, base + WINDOW_MS), 1e-9)
+    assertEquals(0.36, DoseRule(15.0, 0.35, user).doseByFeel(flat(20.0, 16.0), base, base + WINDOW_MS), 1e-9)
     // Never below zero, even far below the points.
     assertEquals(0.0, DoseRule(-15.0, 0.1).doseByFeel(flat(-14.0, -30.0), base, base + WINDOW_MS), 1e-9)
   }
@@ -179,5 +191,19 @@ class CoreTest
     assertEquals(null, com.falcorr.lactulose.core.parseDosePoints("15 0.3\n15 0.4"))
     assertEquals(null, com.falcorr.lactulose.core.parseDosePoints("15 0.3\n60 0.4"))
     assertEquals(null, com.falcorr.lactulose.core.parseDosePoints("15 0.3\n20 4"))
+  }
+
+
+  @Test
+  fun offsetAddsToBothDoses()
+  {
+    val series = TempSeries(longArrayOf(base, base + 10 * HOUR_MS), doubleArrayOf(20.0, 20.0), doubleArrayOf(18.0, 18.0))
+    val plain = DoseRule()
+    val offset = DoseRule(offsetMl = 0.25)
+
+    // A 0.25 mL offset adds exactly 0.25 mL to the by-temperature and by-feel window doses.
+    assertEquals(plain.doseByTemp(series, base, base + WINDOW_MS) + 0.25, offset.doseByTemp(series, base, base + WINDOW_MS), 1e-9)
+    assertEquals(plain.doseByFeel(series, base, base + WINDOW_MS) + 0.25, offset.doseByFeel(series, base, base + WINDOW_MS), 1e-9)
+    assertEquals("0.65mL", formatMl(offset.doseByTemp(series, base, base + WINDOW_MS)))
   }
 }

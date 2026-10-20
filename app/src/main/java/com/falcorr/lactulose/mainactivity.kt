@@ -43,6 +43,8 @@ import com.falcorr.lactulose.core.MAX_FLOOR_C
 import com.falcorr.lactulose.core.MAX_FLOOR_ML
 import com.falcorr.lactulose.core.MIN_FLOOR_C
 import com.falcorr.lactulose.core.MIN_FLOOR_ML
+import com.falcorr.lactulose.core.MAX_OFFSET_ML
+import com.falcorr.lactulose.core.MIN_OFFSET_ML
 import com.falcorr.lactulose.core.DEFAULT_SNAP_MIN
 import com.falcorr.lactulose.core.MAX_SNAP_MIN
 import com.falcorr.lactulose.core.MIN_SNAP_MIN
@@ -87,6 +89,7 @@ internal const val KEY_PLACE = "place"
 internal const val KEY_FLOOR_C = "floorC"
 internal const val KEY_FLOOR_ML = "floorMl"
 internal const val KEY_DOSE_POINTS = "dosePoints"
+internal const val KEY_DOSE_OFFSET = "doseOffsetMl"
 
 // Preference keys for the outage point and its display name, entered on the phone and never in the code.
 private const val KEY_OUTAGE_LAT = "outageLat"
@@ -136,7 +139,8 @@ private const val ASK_LOCATION_OUTAGES = 4
 internal fun loadDoseRule(prefs: android.content.SharedPreferences): DoseRule =
   DoseRule(prefs.getFloat(KEY_FLOOR_C, DEFAULT_FLOOR_C.toFloat()).toDouble(),
     prefs.getFloat(KEY_FLOOR_ML, DEFAULT_FLOOR_ML.toFloat()).toDouble(),
-    parseDosePoints(prefs.getString(KEY_DOSE_POINTS, "") ?: "") ?: DEFAULT_DOSE_POINTS)
+    parseDosePoints(prefs.getString(KEY_DOSE_POINTS, "") ?: "") ?: DEFAULT_DOSE_POINTS,
+    prefs.getFloat(KEY_DOSE_OFFSET, 0f).toDouble().coerceIn(MIN_OFFSET_ML, MAX_OFFSET_ML))
 
 
 // Takes the one manual refresh allowed per minute plus a few random seconds, shared by the Refresh button and the
@@ -423,6 +427,7 @@ class MainActivity : Activity()
     val doseField = android.widget.EditText(this)
     val pointsField = android.widget.EditText(this)
     val snapField = android.widget.EditText(this)
+    val offsetField = android.widget.EditText(this)
     val scroll = ScrollView(this)
 
     form.orientation = LinearLayout.VERTICAL
@@ -440,6 +445,10 @@ class MainActivity : Activity()
     pointsField.inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_FLAG_MULTI_LINE
     pointsField.setText(formatDosePoints(doseRule.points))
     form.addView(pointsField)
+    form.addView(TextView(this).apply { text = getString(R.string.offset_label) })
+    offsetField.inputType = android.text.InputType.TYPE_CLASS_NUMBER or android.text.InputType.TYPE_NUMBER_FLAG_DECIMAL
+    offsetField.setText(String.format(Locale.ROOT, "%.2f", doseRule.offsetMl))
+    form.addView(offsetField)
     form.addView(TextView(this).apply { text = getString(R.string.snap_label) })
     snapField.inputType = android.text.InputType.TYPE_CLASS_NUMBER
     snapField.setText(getPreferences(MODE_PRIVATE).getInt(KEY_SNAP_MIN, DEFAULT_SNAP_MIN).toString())
@@ -463,15 +472,16 @@ class MainActivity : Activity()
         val floorMl = doseField.text.toString().toDoubleOrNull()
         val points = parseDosePoints(pointsField.text.toString())
         val snap = snapField.text.toString().toIntOrNull()
+        val offset = offsetField.text.toString().toDoubleOrNull()
 
         if (snap == null || snap !in MIN_SNAP_MIN..MAX_SNAP_MIN) toast(getString(R.string.snap_invalid))
         else saveSnap(snap)
         if (floorC == null || floorMl == null || floorC !in MIN_FLOOR_C..MAX_FLOOR_C || floorMl !in MIN_FLOOR_ML..MAX_FLOOR_ML ||
-          points == null)
+          points == null || offset == null || offset !in MIN_OFFSET_ML..MAX_OFFSET_ML)
         {
           toast(getString(R.string.dose_settings_invalid))
         }
-        else saveDoseRule(DoseRule(floorC, floorMl, points))
+        else saveDoseRule(DoseRule(floorC, floorMl, points, offset))
       }
       .show()
   }
@@ -502,7 +512,8 @@ class MainActivity : Activity()
     doseRule = rule
     graph.setFloor(rule.floorC)
     getPreferences(MODE_PRIVATE).edit().putFloat(KEY_FLOOR_C, rule.floorC.toFloat())
-      .putFloat(KEY_FLOOR_ML, rule.floorMl.toFloat()).putString(KEY_DOSE_POINTS, formatDosePoints(rule.points)).apply()
+      .putFloat(KEY_FLOOR_ML, rule.floorMl.toFloat()).putString(KEY_DOSE_POINTS, formatDosePoints(rule.points))
+      .putFloat(KEY_DOSE_OFFSET, rule.offsetMl.toFloat()).apply()
     showAverages()
     DosesWidget.refreshAll(this)
   }

@@ -14,11 +14,11 @@
   <string name="dose_by_temp">%1$s by temp</string>
   <string name="dose_by_feel">%1$s by feel</string>
   <string name="dose_settings">Lactulose dose</string>
-  <string name="dose_settings_help">Dose follows the points below, straight lines between them, and never less than the floor dose. Below the floor temperature the floor counts instead. By feel, the floor is lowered by how far feels-like is below the temperature. The window dose is the average of every minute\'s dose.</string>
+  <string name="dose_settings_help">The floor (temperature and dose) is the first point; the dose then follows the points above it in straight lines, never less than the floor dose. Below the floor temperature the floor counts. By feel, the floor temperature is lowered by how far feels-like is below the temperature, and the line continues below the floor dose. The window dose is the average of every minute\'s dose, plus the offset.</string>
   <string name="floor_temp_label">Floor temperature (°C)</string>
   <string name="floor_dose_label">Dose at the floor (mL)</string>
   <string name="dose_points_label">Dose points, one per line: °C then mL</string>
-  <string name="dose_settings_invalid">Not saved: temperatures must be -15 to 50 °C, doses 0.1 to 3.0 mL, and at least two points.</string>
+  <string name="dose_settings_invalid">Not saved: temperatures must be -15 to 50 °C, doses 0.1 to 3.0 mL, at least two points, and the offset 0.00 to 1.00 mL.</string>
   <string name="reset">Defaults</string>
   <string name="status_line">BoM observed %1$s · fetched %2$s</string>
   <string name="range_line">Lactulose %1$s – %2$s</string>
@@ -75,4 +75,5 @@
   <string name="widget_sync">Sync</string>
   <string name="add_widget">Add doses widget to home screen</string>
   <string name="widget_pin_unsupported">This home screen can\'t add widgets from apps: long-press the home screen, choose Widgets, and find Lactulose.</string>
+  <string name="offset_label">Offset added to both doses (0.00–1.00 mL)</string>
 </resources>

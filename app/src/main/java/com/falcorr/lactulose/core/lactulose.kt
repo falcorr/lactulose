@@ -1,13 +1,16 @@
 // 20/10/2026 created by Claude Opus 5.5
 // 20/10/2026 last modified by Claude Opus 5.5
 // lactulose.kt
-// The lactulose dose rule (user, 20/10/2026): a list of temperature-to-dose points, interpolated in straight
-// lines between them and extended past the ends along the end segments, so the curve can be made nonlinear by
-// editing points. The defaults are the user's points (15 °C 0.3 mL, 20 °C 0.4 mL ... 50 °C 1.0 mL). The points
-// apply at and above the floor temperature but never give less than the floor dose; below the floor the floor
-// temperature counts instead. The feels-like dose uses a floor lowered by how far feels-like is below the
-// temperature at each moment, and may go below the floor dose (user, 20/10/2026). A window's dose is the mean of each moment's dose. Works for any floor
-// temperature, including below zero.
+// The lactulose dose rule (user, 20/10/2026): the floor (floor temperature, floor dose) is itself the first point
+// of the curve, followed by the user's points above the floor temperature, interpolated in straight lines and
+// extended past the ends along the end segments, so the curve can be made nonlinear by editing points. Points at
+// or below the floor temperature are replaced by the floor. The defaults are the user's points (15 °C 0.3 mL,
+// 20 °C 0.4 mL ... 50 °C 1.0 mL). Changing the floor dose therefore bends the curve smoothly up to the next point
+// rather than flattening it. The temperature dose never goes below the floor dose; below the floor temperature the
+// floor temperature counts instead. The feels-like dose uses a floor temperature lowered by how far feels-like is
+// below the temperature at each moment and follows the same curve, continued below the floor along its first
+// segment, so it may go below the floor dose (never below zero) and moves with the floor dose. A window's dose is the mean of each moment's dose, plus a
+// user-set offset (0.00 to 1.00 mL) added to both doses. Works for any floor temperature, including below zero.
 package com.falcorr.lactulose.core
 
 import java.util.Locale
@@ -26,21 +29,38 @@ const val MAX_FLOOR_C = 50.0
 const val MIN_FLOOR_ML = 0.1
 const val MAX_FLOOR_ML = 3.0
 
+// Allowed range of the offset added to both window doses (user, 20/10/2026).
+const val MIN_OFFSET_ML = 0.0
+const val MAX_OFFSET_ML = 1.0
+
 // Window doses average the dose at the middle of each minute.
 private const val DOSE_STEP_MS = 60_000L
 
 
 // A dose rule with floor temperature floorC in °C, the floor dose floorMl in mL, and the points (°C, mL),
-// sorted by temperature with no repeats and at least two of them.
+// sorted by temperature with no repeats and at least two of them, and offsetMl added to both window doses.
 class DoseRule(
   val floorC: Double = DEFAULT_FLOOR_C,
   val floorMl: Double = DEFAULT_FLOOR_ML,
-  val points: List<Pair<Double, Double>> = DEFAULT_DOSE_POINTS
+  val points: List<Pair<Double, Double>> = DEFAULT_DOSE_POINTS,
+  val offsetMl: Double = 0.0
 )
 {
-  // Returns the points' dose at celsius: straight lines between points, and past either end along the end segment.
+  // The curve's points: the floor, then the points above the floor temperature. With none above it, a point 5 °C
+  // higher continues at the points' last slope (or level if they give none).
+  private val curve: List<Pair<Double, Double>> = run {
+    val above = points.filter { it.first > floorC }
+    val slope = if (points.size >= 2) (points.last().second - points[points.size - 2].second) /
+      (points.last().first - points[points.size - 2].first) else 0.0
+
+    listOf(Pair(floorC, floorMl)) + above.ifEmpty { listOf(Pair(floorC + 5.0, floorMl + 5.0 * slope)) }
+  }
+
+
+  // Returns the curve's dose at celsius: straight lines between points, and past either end along the end segment.
   fun curveMl(celsius: Double): Double
   {
+    val points = curve
     var i = 1
 
     while (i < points.size - 1 && celsius > points[i].first) i++
@@ -54,22 +74,28 @@ class DoseRule(
     if (celsius.isNaN()) Double.NaN else maxOf(floorMl, curveMl(maxOf(celsius, floorC)))
 
 
-  // Returns the mean dose over series' temperatures between startMs and endMs, or NaN when the window isn't covered.
+  // Returns the mean dose over series' temperatures between startMs and endMs plus the offset, or NaN when the
+  // window isn't covered.
   fun doseByTemp(series: TempSeries, startMs: Long, endMs: Long): Double =
-    meanOver(startMs, endMs) { doseMl(series.valueAt(series.temps, it)) }
+    meanOver(startMs, endMs) { doseMl(series.valueAt(series.temps, it)) } + offsetMl
 
 
-  // Returns the mean dose over series' feels-like between startMs and endMs. At each moment feels-like is held no
-  // lower than the floor temperature minus that moment's gap between temperature and feels-like, which is the same
-  // as adding the amount temperature is below the floor. Unlike the temperature dose it may go below the floor
-  // dose, but never below zero.
+  // Returns the mean dose over series' feels-like between startMs and endMs plus the offset. At each moment
+  // feels-like is held no lower than the floor temperature minus that moment's gap between temperature and
+  // feels-like, which is the same as adding the amount temperature is below the floor; feelsDoseMl gives its dose.
   fun doseByFeel(series: TempSeries, startMs: Long, endMs: Long): Double =
     meanOver(startMs, endMs) {
       val temp = series.valueAt(series.temps, it)
       val feels = series.valueAt(series.feels, it)
 
-      if (temp.isNaN() || feels.isNaN()) Double.NaN else maxOf(0.0, curveMl(feels + maxOf(0.0, floorC - temp)))
-    }
+      if (temp.isNaN() || feels.isNaN()) Double.NaN else feelsDoseMl(feels + maxOf(0.0, floorC - temp))
+    } + offsetMl
+
+
+  // Returns the by-feel dose for an adjusted feels-like of celsius: at or above the floor temperature the same as
+  // the temperature dose; below it the curve continued below the floor, never below zero.
+  fun feelsDoseMl(celsius: Double): Double =
+    if (celsius >= floorC) doseMl(celsius) else maxOf(0.0, curveMl(celsius))
 
 
   // Returns the mean of dose sampled at the middle of each DOSE_STEP_MS step from startMs to endMs; NaN if any is.
