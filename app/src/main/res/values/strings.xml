@@ -65,4 +65,5 @@
   <string name="refresh_failed">%1$s refresh failed at %2$s: %3$s</string>
   <string name="weather_word">Weather</string>
   <string name="outages_word">Outages</string>
+  <string name="outage_wait">Outages were checked under 5 minutes ago; checking again shortly.</string>
 </resources>

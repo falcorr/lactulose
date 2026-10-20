@@ -109,6 +109,9 @@ private const val WEATHER_REFRESH_MS = 15 * MINUTE_MS
 private const val OUTAGE_REFRESH_MS = 15 * MINUTE_MS
 private const val REFRESH_JITTER_MS = MINUTE_MS
 private const val MANUAL_REFRESH_GAP_MS = 60_000L
+
+// Outage downloads are never closer together than this, whatever asks for them (user, 20/10/2026).
+private const val OUTAGE_MIN_GAP_MS = 5 * MINUTE_MS
 private const val MANUAL_REFRESH_JITTER_MS = 8_000L
 
 // Thunder observed this recently counts as current.
@@ -194,6 +197,9 @@ class MainActivity : Activity()
   // The last failed weather and outage refreshes, shown in red under the Refresh button until one succeeds.
   private var weatherFailNote = ""
   private var outageFailNote = ""
+
+  // When the last outage download started, for OUTAGE_MIN_GAP_MS; touched only on the outage worker.
+  private var outageDownloadMs = 0L
   private lateinit var failText: TextView
 
   // Formats clock times following the phone's 12/24 h setting.
@@ -659,12 +665,20 @@ class MainActivity : Activity()
         outagesUpdatedMs = cached.first
         showOutages()
       }
-      if (!forceRefresh && cached != null && now - cached.first <= OUTAGE_REFRESH_MS + outageJitterMs)
+      if (now - outageDownloadMs < OUTAGE_MIN_GAP_MS ||
+        !forceRefresh && cached != null && now - cached.first <= OUTAGE_REFRESH_MS + outageJitterMs)
       {
-        mainHandler.post { outagesBusy = false }
+        // A list still waiting for its first download says why; the minute tick tries again.
+        mainHandler.post {
+          outagesBusy = false
+          if (outageStatus == getString(R.string.loading)) outageStatus = getString(R.string.outage_wait)
+          showOutages()
+        }
         return
       }
       val point = outagePoint() ?: return
+
+      outageDownloadMs = now
       val result = repository.refreshOutages(now, point.first, point.second)
 
       mainHandler.post {

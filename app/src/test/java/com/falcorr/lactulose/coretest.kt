@@ -59,9 +59,12 @@ class CoreTest
   {
     val now = base + 7 * MINUTE_MS
 
-    // Requests before or at the first quarter after now give exactly now.
-    assertEquals(now, snapWindowStart(now - HOUR_MS, now, sydney, 15 * MINUTE_MS))
-    assertEquals(now, snapWindowStart(now, now, sydney, 15 * MINUTE_MS))
+    // Requests before the first quarter at or after now give that quarter, never now itself.
+    assertEquals(base + 15 * MINUTE_MS, snapWindowStart(now - HOUR_MS, now, sydney, 15 * MINUTE_MS))
+    assertEquals(base + 15 * MINUTE_MS, snapWindowStart(now, now, sydney, 15 * MINUTE_MS))
+    assertEquals(base, snapWindowStart(base - HOUR_MS, base, sydney, 15 * MINUTE_MS))
+    // The user's example: at 4:24pm with 30-minute steps the earliest start is 4:30pm.
+    assertEquals(base + 30 * MINUTE_MS, snapWindowStart(base + 24 * MINUTE_MS, base + 24 * MINUTE_MS, sydney))
     assertEquals(base + 15 * MINUTE_MS, snapWindowStart(now + MINUTE_MS, now, sydney, 15 * MINUTE_MS))
     assertEquals(base + 15 * MINUTE_MS, snapWindowStart(base + 12 * MINUTE_MS, now, sydney, 15 * MINUTE_MS))
     assertEquals(base + 30 * MINUTE_MS, snapWindowStart(base + 23 * MINUTE_MS, now, sydney, 15 * MINUTE_MS))

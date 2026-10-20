@@ -75,7 +75,7 @@ class TemperatureGraph(context: Context) : View(context)
   private val leftMargin = 20 * density
   private val rightMargin = 4 * density
   private val topMargin = 5 * density
-  private val bottomMargin = 13 * density
+  private val bottomMargin = 22 * density
 
   // Reused drawing objects so onDraw allocates nothing.
   private val gridPaint = Paint().apply { strokeWidth = density * 0.6f }
@@ -205,15 +205,16 @@ class TemperatureGraph(context: Context) : View(context)
   }
 
 
-  // Moves the current time to timeMs and places the window at windowStart, clamped so it never starts
-  // before now (a window left behind by time follows now), then redraws. Pass -1 to start it at now.
+  // Moves the current time to timeMs and places the window at windowStart, snapped and clamped so it never starts
+  // before the first snap time at or after now (a window left behind by time moves on), then redraws. Pass -1 to
+  // start it at that first snap time.
   fun setNow(timeMs: Long, windowStart: Long = windowStartMs)
   {
     val previous = windowStartMs
 
     nowMs = timeMs
     zone = TimeZone.getDefault()
-    windowStartMs = if (windowStart <= nowMs) nowMs else snapWindowStart(windowStart, nowMs, zone, snapMs)
+    windowStartMs = snapWindowStart(windowStart, nowMs, zone, snapMs)
     if (windowStartMs != previous) onWindowChanged(windowStartMs)
     invalidate()
   }
@@ -223,7 +224,7 @@ class TemperatureGraph(context: Context) : View(context)
   {
     val width = MeasureSpec.getSize(widthMeasureSpec)
 
-    setMeasuredDimension(width, (190 * density).toInt())
+    setMeasuredDimension(width, (199 * density).toInt())
   }
 
 
@@ -255,6 +256,7 @@ class TemperatureGraph(context: Context) : View(context)
     var x = 0f
     var y = 0f
     var hour = 0
+    var halfWidth = 0f
 
     // Temperature marks every 2.5 °C, labelled every 5 °C.
     while (celsius <= AXIS_MAX_C)
@@ -287,12 +289,12 @@ class TemperatureGraph(context: Context) : View(context)
       {
         canvas.drawLine(x, bottom, x, bottom + 3 * density, gridPaint)
         hour = (Math.floorMod(tick + zone.getOffset(tick), 24 * HOUR_MS) / HOUR_MS).toInt()
-        // Labels that would be cut off at either edge are left out; the tick still shows.
-        // 6am, 12pm, 6pm and 12am are brighter, with am or pm written out.
-        // An hour label next to one of those is left out when the two would touch.
+        // Every hour is labelled (user, 20/10/2026); a label near either edge is moved in so it isn't cut off.
+        // 6am, 12pm, 6pm and 12am are brighter, with am or pm written out, and sit a row lower to have room.
         labelPaint.color = if (hour % 6 == 0) COLOUR_LABEL_MAIN else COLOUR_LABEL
-        if (x > leftMargin + 9 * density && x < right - 9 * density && !crowdsMainLabel(hour, xOf(tick + HOUR_MS) - x))
-          canvas.drawText(hourLabels[hour], x, height - 1.5f * density, labelPaint)
+        halfWidth = labelPaint.measureText(hourLabels[hour]) / 2
+        canvas.drawText(hourLabels[hour], x.coerceIn(halfWidth, width - halfWidth),
+          height - (if (hour % 6 == 0) 1.5f else 10.5f) * density, labelPaint)
         labelPaint.color = COLOUR_LABEL
       }
       else
@@ -328,17 +330,6 @@ class TemperatureGraph(context: Context) : View(context)
 
     x = xOf(nowMs)
     canvas.drawLine(x, 0f, x, bottom, nowPaint)
-  }
-
-
-  // Reports whether hour's label, beside a brighter 6-hourly label, would touch it when hours are hourPx apart.
-  private fun crowdsMainLabel(hour: Int, hourPx: Float): Boolean
-  {
-    val neighbour = if ((hour + 1) % 6 == 0) (hour + 1) % 24 else if ((hour + 23) % 6 == 0) (hour + 23) % 24 else -1
-
-    if (hour % 6 == 0 || neighbour < 0) return false
-    return (labelPaint.measureText(hourLabels[hour]) + labelPaint.measureText(hourLabels[neighbour])) / 2 +
-      2 * density > hourPx
   }
 
 
