@@ -1,5 +1,5 @@
 // 20/10/2026 created by Claude Opus 5.5
-// 20/10/2026 last modified by Claude Opus 5.5
+// 20/10/2026 last modified by Claude Opus 4.6
 // coretest.kt
 // Unit tests for interpolation, window averages, window snapping and clamping, and the lactulose dose.
 package com.falcorr.lactulose
@@ -93,6 +93,8 @@ class CoreTest
   @Test
   fun lactuloseMatchesUserPoints()
   {
+    // The dose is the curve looked up directly at the temperature, with the floor dose as a minimum.
+    // No floor temperature clamping on the input (user, 09:23).
     val points = mapOf(-5.0 to "0.30mL", 10.0 to "0.30mL", 15.0 to "0.30mL", 20.0 to "0.40mL", 25.0 to "0.50mL",
       30.0 to "0.60mL", 35.0 to "0.70mL", 40.0 to "0.80mL", 45.0 to "0.90mL", 50.0 to "1.00mL")
 
@@ -103,16 +105,16 @@ class CoreTest
     assertEquals("0.35mL", formatMl(rule.doseMl(17.5)))
     assertEquals("0.43mL", formatMl(rule.doseMl(21.25)))
     assertEquals("–mL", formatMl(rule.doseMl(Double.NaN)))
-    // A changed floor keeps the points but never gives less than the floor dose.
+    // A high floor dose catches anything below it.
     assertEquals("0.90mL", formatMl(DoseRule(19.0, 0.9).doseMl(23.5)))
     assertEquals("0.90mL", formatMl(DoseRule(19.0, 0.9).doseMl(45.0)))
     assertEquals("1.00mL", formatMl(DoseRule(19.0, 0.9).doseMl(50.0)))
-    // A higher floor with a small floor dose: below the floor temperature the floor temperature counts, and the
-    // floor dose is only a minimum, so the points still decide (0.4 mL at 20 °C).
-    assertEquals(0.4, DoseRule(20.0, 0.2).doseMl(10.0), 1e-9)
+    // The curve is looked up at the actual temperature, not clamped to the floor temperature: at 10 °C the curve
+    // gives 0.20 mL, which is above the floor dose 0.2, so 0.20 mL is returned (user, 09:23).
+    assertEquals(0.2, DoseRule(20.0, 0.2).doseMl(10.0), 1e-9)
     assertEquals(0.45, DoseRule(20.0, 0.2).doseMl(22.5), 1e-9)
     assertEquals(0.5, DoseRule(20.0, 0.2).doseMl(25.0), 1e-9)
-    // Floors below zero and the setting limits: the points extended down, never below the floor dose.
+    // The floor dose catches negative curve values at very low temperatures.
     assertEquals(0.1, DoseRule(-15.0, 0.1).doseMl(-20.0), 1e-9)
     assertEquals(0.2, DoseRule(-15.0, 0.1).doseMl(10.0), 1e-9)
     assertEquals(3.0, DoseRule(50.0, 3.0).doseMl(50.0), 1e-9)
@@ -131,7 +133,7 @@ class CoreTest
     assertEquals(15.0, ramp.averageClamped(ramp.temps, base, base + HOUR_MS / 4, 15.0), 1e-9)
     assertEquals(series.average(series.temps, base, base + 2 * HOUR_MS),
       series.averageClamped(series.temps, base, base + 2 * HOUR_MS, -5.0), 1e-9)
-    // The user's example: 3 h at 10 °C then 3.5 h at 30 °C gives 0.46 mL (0.3 for 3 h, 0.6 for 3.5 h).
+    // 3 h at 10 °C then 3.5 h at 30 °C: per-minute doses are 0.3 (floor) for the cold half and 0.6 for the warm half.
     val steps = TempSeries(longArrayOf(base, base + 3 * HOUR_MS, base + 3 * HOUR_MS + 1, base + WINDOW_MS),
       doubleArrayOf(10.0, 10.0, 30.0, 30.0), doubleArrayOf(10.0, 10.0, 30.0, 30.0))
 
@@ -154,8 +156,9 @@ class CoreTest
     // Feels-like warmer than the temperature raises the by-feel dose (and its floor temperature).
     assertEquals(0.84, rule.doseByFeel(flat(40.0, 42.0), base, base + WINDOW_MS), 1e-9)
     // Temperature 14 °C, feels 10 °C: the feels floor is 15 - 4 = 11 °C, so feels-like counts as 11 °C, which the
-    // points give as 0.22 mL, held at the floor dose 0.3 mL. With a smaller floor dose 0.1 mL it shows: 0.22 mL.
+    // points give as 0.22 mL; the default floor dose 0.3 catches it (user, 09:36).
     assertEquals(0.3, rule.doseByFeel(flat(14.0, 10.0), base, base + WINDOW_MS), 1e-9)
+    // With a lower floor dose (0.1), the curve value 0.22 stands.
     assertEquals(0.22, DoseRule(15.0, 0.1).doseByFeel(flat(14.0, 10.0), base, base + WINDOW_MS), 1e-9)
     // Feels-like above its shifted floor is used as is: temperature 16, feels 12 (floor 11): 0.24 mL.
     assertEquals(0.24, DoseRule(15.0, 0.1).doseByFeel(flat(16.0, 12.0), base, base + WINDOW_MS), 1e-9)
@@ -170,13 +173,14 @@ class CoreTest
     assertEquals(0.9, DoseRule(19.0, 0.9).doseByFeel(flat(23.5, 21.2), base, base + WINDOW_MS), 1e-9)
     // Floors below zero.
     assertEquals(0.1, DoseRule(-15.0, 0.1).doseByFeel(flat(-14.0, -30.0), base, base + WINDOW_MS), 1e-9)
-    // With the shift switched off, both doses use the normal floor temperature: temperature 14, feels 10 counts
-    // feels-like as 15 °C (0.3 mL) instead of 11 °C (0.22 mL); temperature 20, feels 16 gives 0.32 mL either way.
+    // With the shift switched off, feels-like uses the same floor temperature as by-temp: temperature 14, feels 10
+    // counts feels-like as max(10, 15) = 15 °C (0.3 mL); temperature 20, feels 16 gives max(16, 15) = 16 → 0.32 mL.
     val unshifted = DoseRule(15.0, 0.1, shiftFeelsFloor = false)
     assertEquals(0.3, unshifted.doseByFeel(flat(14.0, 10.0), base, base + WINDOW_MS), 1e-9)
     assertEquals(0.32, unshifted.doseByFeel(flat(20.0, 16.0), base, base + WINDOW_MS), 1e-9)
     assertEquals(0.32, DoseRule(15.0, 0.1).doseByFeel(flat(20.0, 16.0), base, base + WINDOW_MS), 1e-9)
-    assertEquals(unshifted.doseMl(12.0), unshifted.feelsDoseMl(30.0, 12.0), 1e-9)
+    // With shift off, feels above the floor gives the same as doseMl at that feels.
+    assertEquals(unshifted.doseMl(16.0), unshifted.feelsDoseMl(30.0, 16.0), 1e-9)
   }
 
 
@@ -195,24 +199,26 @@ class CoreTest
     var floorC: Double
     var floorMl: Double
 
+    // byTemp: curve(17.1) = 0.342, max(0.3, 0.342) = 0.342; byFeel: curve(max(14.9, 12.8)) = curve(14.9) = 0.298,
+    // max(0.3, 0.298) = 0.3. With floor dose 0.35: both caught by floor.
     assertEquals(0.342, DoseRule(15.0, 0.3, user).doseByTemp(window, base, base + WINDOW_MS), 1e-9)
     assertEquals(0.3, DoseRule(15.0, 0.3, user).doseByFeel(window, base, base + WINDOW_MS), 1e-9)
     assertEquals(0.35, DoseRule(15.0, 0.35, user).doseByTemp(window, base, base + WINDOW_MS), 1e-9)
     assertEquals(0.35, DoseRule(15.0, 0.35, user).doseByFeel(window, base, base + WINDOW_MS), 1e-9)
-    // For many temperatures, floors and floor doses, the by-feel dose is exactly the temperature rule with the
-    // floor temperature offset by feels-like minus temperature, evaluated at feels-like; with no gap the two
-    // doses match; and a colder feels-like never gives more than the temperature dose.
+    // For many temperatures, floors and floor doses: the by-feel dose is the floor dose or the curve at the effective
+    // feels-like, whichever is higher; when feels equals temperature the feels dose is at least the temperature dose;
+    // and a colder feels-like never gives more than a warmer one.
     repeat(2000) {
       temp = -10.0 + 55.0 * random.nextDouble()
       feels = temp - 8.0 + 11.0 * random.nextDouble()
       floorC = -15.0 + 65.0 * random.nextDouble()
       floorMl = 0.1 + 2.9 * random.nextDouble()
       val rule = DoseRule(floorC, floorMl, DEFAULT_DOSE_POINTS)
+      val effectiveFeels = maxOf(feels, floorC + (feels - temp))
 
-      assertEquals(DoseRule(floorC + feels - temp, floorMl, DEFAULT_DOSE_POINTS).doseMl(feels),
-        rule.feelsDoseMl(temp, feels), 1e-9)
-      assertEquals(rule.doseMl(temp), rule.feelsDoseMl(temp, temp), 1e-9)
-      if (feels <= temp) assertTrue(rule.feelsDoseMl(temp, feels) <= rule.doseMl(temp) + 1e-9)
+      assertEquals(maxOf(floorMl, rule.curveMl(effectiveFeels)), rule.feelsDoseMl(temp, feels), 1e-9)
+      assertTrue(rule.feelsDoseMl(temp, temp) >= rule.doseMl(temp) - 1e-9)
+      if (feels <= temp) assertTrue(rule.feelsDoseMl(temp, feels) <= rule.feelsDoseMl(temp, temp) + 1e-9)
     }
   }
 

@@ -1,14 +1,13 @@
 // 20/10/2026 created by Claude Opus 5.5
-// 20/10/2026 last modified by Claude Opus 5.5
+// 20/10/2026 last modified by Claude Opus 4.6
 // lactulose.kt
 // The lactulose dose rule (user, 20/10/2026). The temperature dose follows the user's points (defaults 15 °C 0.3 mL,
 // 20 °C 0.4 mL ... 50 °C 1.0 mL), interpolated in straight lines and extended past the ends along the end segments.
-// Below the floor temperature the floor temperature counts, and the dose is never less than the floor dose. The
-// feels-like dose is the same rule applied to feels-like, with the floor temperature offset by feels-like minus
-// temperature at that moment (user, 08:46), so it equals the temperature dose when the two temperatures match; a
-// setting (user, 08:48) turns that shift off so both doses use the normal floor temperature.
-// A window's dose is the mean of each moment's dose, plus a user-set offset (0.00 to 1.00 mL) added to both doses.
-// Works for any floor temperature, including below zero.
+// The floor dose is the minimum for both the temperature dose and the feels-like dose (user, 09:36).
+// The feels-like dose uses the same curve and floor settings; with shiftFeelsFloor on, the floor temperature is offset
+// by feels-like minus temperature (user, 08:46); with it off the floor temperature is the same (user, 09:36).
+// A window's dose is the mean of per-minute doses across the window (user, 09:35), plus a user-set offset
+// (0.00 to 1.00 mL) added to both. Works for any floor temperature, including below zero.
 package com.falcorr.lactulose.core
 
 import java.util.Locale
@@ -31,14 +30,13 @@ const val MAX_FLOOR_ML = 3.0
 const val MIN_OFFSET_ML = 0.0
 const val MAX_OFFSET_ML = 1.0
 
-// Window doses average the dose at the middle of each minute.
-private const val DOSE_STEP_MS = 60_000L
-
+// Step between dose samples in the per-minute averaging (user, 09:35).
+const val DOSE_STEP_MS = MINUTE_MS
 
 // A dose rule with floor temperature floorC in °C, the floor dose floorMl in mL, and the points (°C, mL),
 // sorted by temperature with no repeats and at least two of them, offsetMl added to both window doses, and
 // shiftFeelsFloor choosing whether the feels-like dose's floor temperature moves by feels-like minus temperature
-// (true) or is the normal floor temperature (false).
+// (true) or uses the same floor temperature as the temperature dose (false) (user, 09:36).
 class DoseRule(
   val floorC: Double = DEFAULT_FLOOR_C,
   val floorMl: Double = DEFAULT_FLOOR_ML,
@@ -58,46 +56,57 @@ class DoseRule(
   }
 
 
-  // Returns the temperature dose in mL for one temperature, or NaN when unknown.
+  // Returns the temperature dose in mL for one temperature, or NaN when unknown: the curve looked up directly,
+  // with the floor dose as a minimum (user, 09:23).
   fun doseMl(celsius: Double): Double =
-    if (celsius.isNaN()) Double.NaN else maxOf(floorMl, curveMl(maxOf(celsius, floorC)))
+    if (celsius.isNaN()) Double.NaN else maxOf(floorMl, curveMl(celsius))
 
 
-  // Returns the feels-like dose in mL for one moment's temperature and feels-like, or NaN when either is unknown:
-  // the same rule as the temperature dose applied to feels-like, with the floor temperature offset by that
-  // moment's feels-like minus temperature (lower when feels-like is colder, higher when warmer) when
-  // shiftFeelsFloor is on, or the normal floor temperature when it is off.
+  // Returns the feels-like dose in mL for one pair of temperature and feels-like, or NaN when either is unknown.
+  // Same floor dose as doseMl (user, 09:36). With shiftFeelsFloor on: the floor temperature is offset by
+  // feels − temp; with it off, it uses the same floor temperature as the temperature dose (user, 09:36).
   fun feelsDoseMl(temp: Double, feels: Double): Double
   {
-    val feelsFloorC = if (shiftFeelsFloor) floorC + (feels - temp) else floorC
-
     if (temp.isNaN() || feels.isNaN()) return Double.NaN
-    return maxOf(floorMl, curveMl(maxOf(feels, feelsFloorC)))
+    if (shiftFeelsFloor)
+    {
+      val feelsFloorC = floorC + (feels - temp)
+      return maxOf(floorMl, curveMl(maxOf(feels, feelsFloorC)))
+    }
+    return maxOf(floorMl, curveMl(maxOf(feels, floorC)))
   }
 
 
-  // Returns the mean dose over series' temperatures between startMs and endMs plus the offset, or NaN when the
-  // window isn't covered.
+  // Returns the mean of per-minute temperature doses across the window plus the offset, or NaN when not covered.
   fun doseByTemp(series: TempSeries, startMs: Long, endMs: Long): Double =
-    meanOver(startMs, endMs) { doseMl(series.valueAt(series.temps, it)) } + offsetMl
+    meanOver(series, startMs, endMs) { t, _ -> doseMl(t) }
 
 
-  // Returns the mean feels-like dose over series between startMs and endMs plus the offset, or NaN when the window
-  // isn't covered.
+  // Returns the mean of per-minute feels-like doses across the window plus the offset, or NaN when not covered.
   fun doseByFeel(series: TempSeries, startMs: Long, endMs: Long): Double =
-    meanOver(startMs, endMs) { feelsDoseMl(series.valueAt(series.temps, it), series.valueAt(series.feels, it)) } +
-      offsetMl
+    meanOver(series, startMs, endMs) { t, f -> feelsDoseMl(t, f) }
 
 
-  // Returns the mean of dose sampled at the middle of each DOSE_STEP_MS step from startMs to endMs; NaN if any is.
-  private fun meanOver(startMs: Long, endMs: Long, dose: (Long) -> Double): Double
+  // Averages dose(temp, feels) at each minute from startMs to endMs inclusive, adds offsetMl. Returns NaN when
+  // any sample falls outside the series.
+  private fun meanOver(series: TempSeries, startMs: Long, endMs: Long, dose: (Double, Double) -> Double): Double
   {
-    val steps = maxOf(1L, (endMs - startMs) / DOSE_STEP_MS)
-    val step = (endMs - startMs).toDouble() / steps
-    var total = 0.0
+    var sum = 0.0
+    var count = 0
+    var t = startMs
 
-    for (i in 0 until steps) total += dose(startMs + ((i + 0.5) * step).toLong())
-    return total / steps
+    while (t <= endMs)
+    {
+      val temp = series.valueAt(series.temps, t)
+      val feels = series.valueAt(series.feels, t)
+
+      if (temp.isNaN() || feels.isNaN()) return Double.NaN
+      sum += dose(temp, feels)
+      count++
+      t += DOSE_STEP_MS
+    }
+    if (count == 0) return Double.NaN
+    return sum / count + offsetMl
   }
 }
 
