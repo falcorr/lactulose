@@ -3,12 +3,12 @@
 // lactulose.kt
 // The lactulose dose rule (user, 20/10/2026). The temperature dose follows the user's points (defaults 15 °C 0.3 mL,
 // 20 °C 0.4 mL ... 50 °C 1.0 mL), interpolated in straight lines and extended past the ends along the end segments.
-// The floor applies to the temperature dose only: below the floor temperature the floor temperature counts, and it
-// is never less than the floor dose. The feels-like dose is not floored; at each moment it is the temperature dose
-// plus an offset, what the points give for feels-like minus temperature at that moment (negative when feels-like
-// is colder, positive when warmer), never below zero. So any change to the temperature dose, such as a new
-// floor dose, moves the feels-like dose by the same amount. A window's dose is the mean of each moment's dose, plus
-// a user-set offset (0.00 to 1.00 mL) added to both doses. Works for any floor temperature, including below zero.
+// Below the floor temperature the floor temperature counts, and the dose is never less than the floor dose. The
+// feels-like dose is the same rule applied to feels-like, with the floor temperature offset by feels-like minus
+// temperature at that moment (user, 08:46), so it equals the temperature dose when the two temperatures match; a
+// setting (user, 08:48) turns that shift off so both doses use the normal floor temperature.
+// A window's dose is the mean of each moment's dose, plus a user-set offset (0.00 to 1.00 mL) added to both doses.
+// Works for any floor temperature, including below zero.
 package com.falcorr.lactulose.core
 
 import java.util.Locale
@@ -36,12 +36,15 @@ private const val DOSE_STEP_MS = 60_000L
 
 
 // A dose rule with floor temperature floorC in °C, the floor dose floorMl in mL, and the points (°C, mL),
-// sorted by temperature with no repeats and at least two of them, and offsetMl added to both window doses.
+// sorted by temperature with no repeats and at least two of them, offsetMl added to both window doses, and
+// shiftFeelsFloor choosing whether the feels-like dose's floor temperature moves by feels-like minus temperature
+// (true) or is the normal floor temperature (false).
 class DoseRule(
   val floorC: Double = DEFAULT_FLOOR_C,
   val floorMl: Double = DEFAULT_FLOOR_ML,
   val points: List<Pair<Double, Double>> = DEFAULT_DOSE_POINTS,
-  val offsetMl: Double = 0.0
+  val offsetMl: Double = 0.0,
+  val shiftFeelsFloor: Boolean = true
 )
 {
   // Returns the points' dose at celsius: straight lines between points, and past either end along the end segment.
@@ -61,16 +64,15 @@ class DoseRule(
 
 
   // Returns the feels-like dose in mL for one moment's temperature and feels-like, or NaN when either is unknown:
-  // the temperature dose plus an offset, the points' change across the feels-like minus temperature difference
-  // measured from the temperature the temperature dose used (negative when feels-like is colder, positive when
-  // warmer), never below zero.
+  // the same rule as the temperature dose applied to feels-like, with the floor temperature offset by that
+  // moment's feels-like minus temperature (lower when feels-like is colder, higher when warmer) when
+  // shiftFeelsFloor is on, or the normal floor temperature when it is off.
   fun feelsDoseMl(temp: Double, feels: Double): Double
   {
-    val used = maxOf(temp, floorC)
-    val offset = curveMl(used + (feels - temp)) - curveMl(used)
+    val feelsFloorC = if (shiftFeelsFloor) floorC + (feels - temp) else floorC
 
     if (temp.isNaN() || feels.isNaN()) return Double.NaN
-    return maxOf(0.0, doseMl(temp) + offset)
+    return maxOf(floorMl, curveMl(maxOf(feels, feelsFloorC)))
   }
 
 

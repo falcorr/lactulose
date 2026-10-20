@@ -140,7 +140,7 @@ class CoreTest
 
 
   @Test
-  fun feelsDoseIsTheTempDoseOffsetByTheGap()
+  fun feelsDoseShiftsTheFloorTemperatureByTheGap()
   {
     val base = 1_800_000_000_000L
     // Flat series over the window: temperature T and feels-like F throughout.
@@ -148,67 +148,71 @@ class CoreTest
       doubleArrayOf(t, t), doubleArrayOf(f, f)) }
     val rule = DoseRule()
 
-    // Above the floor: 0.8 mL by temp at 40 °C, and 5 °C colder by feel is 0.1 mL less.
+    // Above both floors: 0.8 mL by temp at 40 °C, and by feel the points at 35 °C, 0.7 mL.
     assertEquals(0.8, rule.doseByTemp(flat(40.0, 35.0), base, base + WINDOW_MS), 1e-9)
     assertEquals(0.7, rule.doseByFeel(flat(40.0, 35.0), base, base + WINDOW_MS), 1e-9)
-    // Feels-like warmer than the temperature raises the by-feel dose.
+    // Feels-like warmer than the temperature raises the by-feel dose (and its floor temperature).
     assertEquals(0.84, rule.doseByFeel(flat(40.0, 42.0), base, base + WINDOW_MS), 1e-9)
-    // Temperature 10 °C, feels 2 °C: by temp the floor 0.3 mL; by feel 8 °C of points lower, 0.14 mL, below the
-    // floor dose because the floor doesn't apply to it.
-    assertEquals(0.3, rule.doseByTemp(flat(10.0, 2.0), base, base + WINDOW_MS), 1e-9)
-    assertEquals(0.14, rule.doseByFeel(flat(10.0, 2.0), base, base + WINDOW_MS), 1e-9)
-    // Floor 10 °C at 0.1 mL: the points give 0.2 mL at 10 °C, so by temp 0.2 mL, and by feel 3 °C lower 0.14 mL.
-    assertEquals(0.2, DoseRule(10.0, 0.1).doseByTemp(flat(5.0, 2.0), base, base + WINDOW_MS), 1e-9)
-    assertEquals(0.14, DoseRule(10.0, 0.1).doseByFeel(flat(5.0, 2.0), base, base + WINDOW_MS), 1e-9)
+    // Temperature 14 °C, feels 10 °C: the feels floor is 15 - 4 = 11 °C, so feels-like counts as 11 °C, which the
+    // points give as 0.22 mL, held at the floor dose 0.3 mL. With a smaller floor dose 0.1 mL it shows: 0.22 mL.
+    assertEquals(0.3, rule.doseByFeel(flat(14.0, 10.0), base, base + WINDOW_MS), 1e-9)
+    assertEquals(0.22, DoseRule(15.0, 0.1).doseByFeel(flat(14.0, 10.0), base, base + WINDOW_MS), 1e-9)
+    // Feels-like above its shifted floor is used as is: temperature 16, feels 12 (floor 11): 0.24 mL.
+    assertEquals(0.24, DoseRule(15.0, 0.1).doseByFeel(flat(16.0, 12.0), base, base + WINDOW_MS), 1e-9)
     // Nonlinear points are followed between and beyond them.
     val curve = DoseRule(15.0, 0.3, listOf(Pair(15.0, 0.3), Pair(25.0, 0.4), Pair(35.0, 1.0)))
     assertEquals(0.35, curve.doseMl(20.0), 1e-9)
     assertEquals(0.7, curve.doseMl(30.0), 1e-9)
     assertEquals(1.3, curve.doseMl(40.0), 1e-9)
-    // ... and the gap is measured along them: 30 °C feeling 20 °C drops 0.7 to 0.35 mL.
     assertEquals(0.35, curve.doseByFeel(flat(30.0, 20.0), base, base + WINDOW_MS), 1e-9)
-    // The user's example floor (19 °C, 0.9 mL): by temp the floor dose; by feel 2.3 °C (0.046 mL) less.
+    // The user's example floor (19 °C, 0.9 mL): both held at the floor dose.
     assertEquals(0.9, DoseRule(19.0, 0.9).doseByTemp(flat(23.5, 21.2), base, base + WINDOW_MS), 1e-9)
-    assertEquals(0.854, DoseRule(19.0, 0.9).doseByFeel(flat(23.5, 21.2), base, base + WINDOW_MS), 1e-9)
-    // Never below zero, even far below the points.
-    assertEquals(0.0, DoseRule(-15.0, 0.1).doseByFeel(flat(-14.0, -30.0), base, base + WINDOW_MS), 1e-9)
+    assertEquals(0.9, DoseRule(19.0, 0.9).doseByFeel(flat(23.5, 21.2), base, base + WINDOW_MS), 1e-9)
+    // Floors below zero.
+    assertEquals(0.1, DoseRule(-15.0, 0.1).doseByFeel(flat(-14.0, -30.0), base, base + WINDOW_MS), 1e-9)
+    // With the shift switched off, both doses use the normal floor temperature: temperature 14, feels 10 counts
+    // feels-like as 15 °C (0.3 mL) instead of 11 °C (0.22 mL); temperature 20, feels 16 gives 0.32 mL either way.
+    val unshifted = DoseRule(15.0, 0.1, shiftFeelsFloor = false)
+    assertEquals(0.3, unshifted.doseByFeel(flat(14.0, 10.0), base, base + WINDOW_MS), 1e-9)
+    assertEquals(0.32, unshifted.doseByFeel(flat(20.0, 16.0), base, base + WINDOW_MS), 1e-9)
+    assertEquals(0.32, DoseRule(15.0, 0.1).doseByFeel(flat(20.0, 16.0), base, base + WINDOW_MS), 1e-9)
+    assertEquals(unshifted.doseMl(12.0), unshifted.feelsDoseMl(30.0, 12.0), 1e-9)
   }
 
 
   @Test
-  fun floorDoseMovesBothDosesTogether()
+  fun feelsDoseIsTheTempRuleWithAShiftedFloor()
   {
     val base = 1_800_000_000_000L
     // The user's screenshots (20/10/2026): points 20..50 °C, floor 15 °C, a window at temperature 17.1 °C and
-    // feels-like 14.9 °C. Raising the floor dose from 0.30 to 0.35 mL raised the by-temp dose but left the
-    // by-feel dose at 0.30 mL. The by-feel dose must stay the by-temp dose less 2.2 °C of points (0.044 mL).
+    // feels-like 14.9 °C. Raising the floor dose from 0.30 to 0.35 mL must raise the by-feel dose too, because the
+    // floor dose belongs to both rules.
     val user = (20..50 step 5).map { Pair(it.toDouble(), it * 0.02) }
     val window = TempSeries(longArrayOf(base, base + WINDOW_MS), doubleArrayOf(17.1, 17.1), doubleArrayOf(14.9, 14.9))
-    val low = DoseRule(15.0, 0.3, user)
-    val high = DoseRule(15.0, 0.35, user)
-
-    assertEquals(0.342, low.doseByTemp(window, base, base + WINDOW_MS), 1e-9)
-    assertEquals(0.298, low.doseByFeel(window, base, base + WINDOW_MS), 1e-9)
-    assertEquals(0.35, high.doseByTemp(window, base, base + WINDOW_MS), 1e-9)
-    assertEquals(0.306, high.doseByFeel(window, base, base + WINDOW_MS), 1e-9)
-    // The same for many varied windows, floors and floor doses: whenever the by-feel dose is above zero, the gap
-    // between the two doses doesn't depend on the floor dose, so both move together.
     val random = java.util.Random(20261020L)
-    var times: LongArray
-    var temps: DoubleArray
-    var feels: DoubleArray
+    var temp: Double
+    var feels: Double
+    var floorC: Double
+    var floorMl: Double
 
-    repeat(500) {
-      times = LongArray(8) { base + it * HOUR_MS }
-      temps = DoubleArray(8) { -5.0 + 45.0 * random.nextDouble() }
-      feels = DoubleArray(8) { temps[it] - 6.0 + 9.0 * random.nextDouble() }
-      val series = TempSeries(times, temps, feels)
-      val floorC = 5.0 + 20.0 * random.nextDouble()
-      val rules = listOf(0.1, 0.3, 0.6, 1.2).map { DoseRule(floorC, it, DEFAULT_DOSE_POINTS) }
-      val gaps = rules.map { it.doseByTemp(series, base, base + WINDOW_MS) - it.doseByFeel(series, base, base + WINDOW_MS) }
-      val lowest = (0 until 8).minOf { rules[0].feelsDoseMl(temps[it], feels[it]) }
+    assertEquals(0.342, DoseRule(15.0, 0.3, user).doseByTemp(window, base, base + WINDOW_MS), 1e-9)
+    assertEquals(0.3, DoseRule(15.0, 0.3, user).doseByFeel(window, base, base + WINDOW_MS), 1e-9)
+    assertEquals(0.35, DoseRule(15.0, 0.35, user).doseByTemp(window, base, base + WINDOW_MS), 1e-9)
+    assertEquals(0.35, DoseRule(15.0, 0.35, user).doseByFeel(window, base, base + WINDOW_MS), 1e-9)
+    // For many temperatures, floors and floor doses, the by-feel dose is exactly the temperature rule with the
+    // floor temperature offset by feels-like minus temperature, evaluated at feels-like; with no gap the two
+    // doses match; and a colder feels-like never gives more than the temperature dose.
+    repeat(2000) {
+      temp = -10.0 + 55.0 * random.nextDouble()
+      feels = temp - 8.0 + 11.0 * random.nextDouble()
+      floorC = -15.0 + 65.0 * random.nextDouble()
+      floorMl = 0.1 + 2.9 * random.nextDouble()
+      val rule = DoseRule(floorC, floorMl, DEFAULT_DOSE_POINTS)
 
-      if (lowest > 0.02) for (gap in gaps) assertEquals(gaps[0], gap, 1e-9)
+      assertEquals(DoseRule(floorC + feels - temp, floorMl, DEFAULT_DOSE_POINTS).doseMl(feels),
+        rule.feelsDoseMl(temp, feels), 1e-9)
+      assertEquals(rule.doseMl(temp), rule.feelsDoseMl(temp, temp), 1e-9)
+      if (feels <= temp) assertTrue(rule.feelsDoseMl(temp, feels) <= rule.doseMl(temp) + 1e-9)
     }
   }
 

@@ -90,6 +90,7 @@ internal const val KEY_FLOOR_C = "floorC"
 internal const val KEY_FLOOR_ML = "floorMl"
 internal const val KEY_DOSE_POINTS = "dosePoints"
 internal const val KEY_DOSE_OFFSET = "doseOffsetMl"
+internal const val KEY_SHIFT_FEELS_FLOOR = "shiftFeelsFloor"
 
 // Preference keys for the outage point and its display name, entered on the phone and never in the code.
 private const val KEY_OUTAGE_LAT = "outageLat"
@@ -140,7 +141,8 @@ internal fun loadDoseRule(prefs: android.content.SharedPreferences): DoseRule =
   DoseRule(prefs.getFloat(KEY_FLOOR_C, DEFAULT_FLOOR_C.toFloat()).toDouble(),
     prefs.getFloat(KEY_FLOOR_ML, DEFAULT_FLOOR_ML.toFloat()).toDouble(),
     parseDosePoints(prefs.getString(KEY_DOSE_POINTS, "") ?: "") ?: DEFAULT_DOSE_POINTS,
-    prefs.getFloat(KEY_DOSE_OFFSET, 0f).toDouble().coerceIn(MIN_OFFSET_ML, MAX_OFFSET_ML))
+    prefs.getFloat(KEY_DOSE_OFFSET, 0f).toDouble().coerceIn(MIN_OFFSET_ML, MAX_OFFSET_ML),
+    prefs.getBoolean(KEY_SHIFT_FEELS_FLOOR, true))
 
 
 // Takes the one manual refresh allowed per minute plus a few random seconds, shared by the Refresh button and the
@@ -428,6 +430,7 @@ class MainActivity : Activity()
     val pointsField = android.widget.EditText(this)
     val snapField = android.widget.EditText(this)
     val offsetField = android.widget.EditText(this)
+    val shiftBox = android.widget.CheckBox(this)
     val scroll = ScrollView(this)
 
     form.orientation = LinearLayout.VERTICAL
@@ -449,6 +452,9 @@ class MainActivity : Activity()
     offsetField.inputType = android.text.InputType.TYPE_CLASS_NUMBER or android.text.InputType.TYPE_NUMBER_FLAG_DECIMAL
     offsetField.setText(String.format(Locale.ROOT, "%.2f", doseRule.offsetMl))
     form.addView(offsetField)
+    shiftBox.text = getString(R.string.shift_feels_floor)
+    shiftBox.isChecked = doseRule.shiftFeelsFloor
+    form.addView(shiftBox)
     form.addView(TextView(this).apply { text = getString(R.string.snap_label) })
     snapField.inputType = android.text.InputType.TYPE_CLASS_NUMBER
     snapField.setText(getPreferences(MODE_PRIVATE).getInt(KEY_SNAP_MIN, DEFAULT_SNAP_MIN).toString())
@@ -481,7 +487,7 @@ class MainActivity : Activity()
         {
           toast(getString(R.string.dose_settings_invalid))
         }
-        else saveDoseRule(DoseRule(floorC, floorMl, points, offset))
+        else saveDoseRule(DoseRule(floorC, floorMl, points, offset, shiftBox.isChecked))
       }
       .show()
   }
@@ -513,7 +519,7 @@ class MainActivity : Activity()
     graph.setFloor(rule.floorC)
     getPreferences(MODE_PRIVATE).edit().putFloat(KEY_FLOOR_C, rule.floorC.toFloat())
       .putFloat(KEY_FLOOR_ML, rule.floorMl.toFloat()).putString(KEY_DOSE_POINTS, formatDosePoints(rule.points))
-      .putFloat(KEY_DOSE_OFFSET, rule.offsetMl.toFloat()).apply()
+      .putFloat(KEY_DOSE_OFFSET, rule.offsetMl.toFloat()).putBoolean(KEY_SHIFT_FEELS_FLOOR, rule.shiftFeelsFloor).apply()
     showAverages()
     DosesWidget.refreshAll(this)
   }
