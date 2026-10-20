@@ -1,7 +1,8 @@
 // 20/10/2026 created by Claude Opus 5.5
 // 20/10/2026 last modified by Claude Opus 5.5
 // datatest.kt
-// Tests for geohash encoding, BoM bundle parsing, outage area tests and KML parsing, and the station table.
+// Tests for geohash encoding, BoM bundle parsing, outage area tests and KML parsing, the station table, and
+// (live only) downloading the latest release.
 package com.falcorr.lactulose
 
 import com.falcorr.lactulose.core.geohash
@@ -146,5 +147,25 @@ class DataTest
 
     assertEquals("95719", table.byId("065070")?.wmo)
     assertEquals("94768", table.nearest(-33.9, 151.2, 1)[0].wmo)
+  }
+
+
+  @Test
+  fun downloadsLatestReleaseApk()
+  {
+    // Live only: fetches the latest release through GitHub's API and its redirect, as the Update button does.
+    if (System.getProperty("live") != "true") return
+    val github = com.falcorr.lactulose.update.GithubRelease(
+      com.falcorr.lactulose.io.SecureFetch(com.falcorr.lactulose.update.GITHUB_HOSTS), "")
+    val release = github.latest()
+    val file = java.io.File.createTempFile("release", ".apk")
+
+    assertTrue(release.error, release.ok)
+    val fetched = github.download(release.value!!, file)
+
+    assertTrue(fetched.error, fetched.ok)
+    assertTrue(file.length() > 50_000)
+    assertEquals("PK", String(file.readBytes().copyOf(2)))
+    file.delete()
   }
 }

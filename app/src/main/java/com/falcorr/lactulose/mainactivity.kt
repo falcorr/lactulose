@@ -939,43 +939,31 @@ class MainActivity : Activity()
     if (celsius.isNaN()) "–" else String.format(Locale.getDefault(), "%.1f°", celsius)
 
 
-  // Update button: checks the latest GitHub release and the granted update folders. The app installs nothing
-  // itself (so it needs no permission to install apps): a newer release is opened in the browser, which downloads
-  // it for Android's own installer, and a newer folder copy is named so it can be opened from the Files app.
+  // Update button: a newer GitHub release is downloaded into the update folder, checked, and left there for the
+  // Files app to open with Android's package installer; otherwise a newer copy already in a folder is pointed out.
+  // No app, browser included, needs permission to install apps (user, 20/10/2026).
   private fun onUpdateTapped()
   {
     updateButton.isEnabled = false
     worker.execute {
       val github = updater.findNewerOnGithub()
-      val local = updater.findNewer()
+      val release = github.first
+      val saved = if (release != null && updater.writableFolder() != null) updater.downloadToFolder(release) else null
+      val local = if (release == null) updater.findNewer() else null
 
       mainHandler.post {
         updateButton.isEnabled = true
         when
         {
-          github.first != null -> openInBrowser(github.first!!.apkUrl, github.first!!.versionName)
+          saved != null && saved.ok -> toast(getString(R.string.update_saved, release!!.versionName, saved.value!!))
+          saved != null -> toast(getString(R.string.update_download_failed, saved.error))
+          release != null -> toast(getString(R.string.update_need_folder, release.versionName))
           local != null -> toast(getString(R.string.update_in_folder, local.versionName, local.fileName))
           updater.folders().isEmpty() && github.second.isNotEmpty() ->
             toast(github.second + "\n" + getString(R.string.update_setup_hint))
           else -> toast(getString(R.string.no_update, updater.installedVersionName()))
         }
       }
-    }
-  }
-
-
-  // Hands the APK address to the browser to download; opening the download then installs it with Android's
-  // package installer.
-  private fun openInBrowser(url: String, versionName: String)
-  {
-    try
-    {
-      startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)).addCategory(Intent.CATEGORY_BROWSABLE))
-      toast(getString(R.string.update_downloading, versionName))
-    }
-    catch (e: android.content.ActivityNotFoundException)
-    {
-      toast(getString(R.string.update_no_browser, url))
     }
   }
 
@@ -1017,10 +1005,14 @@ class MainActivity : Activity()
   }
 
 
-  // Opens the system folder picker starting at initialUri (read access only).
+  // Opens the system folder picker starting at initialUri, asking for lasting read and write access (write lets
+  // updates be saved there).
   private fun pickFolder(requestCode: Int, initialUri: String)
   {
     val pick = Intent(Intent.ACTION_OPEN_DOCUMENT_TREE)
+
+    pick.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION or
+      Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION)
 
     pick.putExtra(DocumentsContract.EXTRA_INITIAL_URI, Uri.parse(initialUri))
     toast(getString(if (requestCode == PICK_INTERNAL) R.string.pick_downloads else R.string.pick_sd))

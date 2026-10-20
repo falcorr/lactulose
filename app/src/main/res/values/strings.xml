@@ -41,8 +41,6 @@
   <string name="updated">(updated %1$s)</string>
   <string name="no_outages">No outages now, none planned in the next 14 days, and none seen in the last 7 days.</string>
   <string name="no_update">No newer version found (installed version %1$s).</string>
-  <string name="update_downloading">Downloading version %1$s in your browser. Open the download when it finishes to install it.</string>
-  <string name="update_no_browser">No browser found. Download %1$s and open it to install.</string>
   <string name="update_in_folder">Version %1$s is in your update folder: open %2$s in your Files app to install it.</string>
   <string name="update_setup_hint">Long-press Update to choose an update folder or enter a GitHub token.</string>
   <string name="update_setup">Update setup</string>
@@ -66,4 +64,7 @@
   <string name="weather_word">Weather</string>
   <string name="outages_word">Outages</string>
   <string name="outage_wait">Outages were checked under 5 minutes ago; checking again shortly.</string>
+  <string name="update_saved">Version %1$s saved as %2$s in your update folder. Open it in your Files app (My Files) to install.</string>
+  <string name="update_download_failed">Update download failed: %1$s</string>
+  <string name="update_need_folder">Version %1$s is available. Long-press Update and choose a folder such as Download/lactulose so it can be saved there.</string>
 </resources>
