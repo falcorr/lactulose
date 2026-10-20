@@ -1,0 +1,69 @@
+// 20/10/2026 created by Claude Opus 5.5
+// 20/10/2026 last modified by Claude Opus 5.5
+// app/build.gradle
+// Builds the weather app for Android 9 (API 28, Samsung S10 at launch) and newer, with no runtime libraries
+// beyond the Kotlin standard library; test-only libraries never ship in the app.
+plugins {
+  id 'com.android.application'
+  id 'org.jetbrains.kotlin.android'
+}
+
+// Release signing key kept outside the source tree so every build can update the installed app.
+def keystoreFile = file(System.getenv('LACTULOSE_KEYSTORE') ?: '/mnt/project-files/lactulose-signing/release.jks')
+
+android {
+  namespace 'com.falcorr.lactulose'
+  compileSdk 35
+
+  defaultConfig {
+    applicationId 'com.falcorr.lactulose'
+    minSdk 28
+    targetSdk 35
+    versionCode 8
+    versionName '0.8.0'
+  }
+
+  signingConfigs {
+    release {
+      storeFile keystoreFile
+      storePassword System.getenv('LACTULOSE_KEY_PASSWORD') ?: ''
+      keyAlias 'lactulose'
+      keyPassword System.getenv('LACTULOSE_KEY_PASSWORD') ?: ''
+    }
+  }
+
+  buildTypes {
+    release {
+      minifyEnabled true
+      shrinkResources true
+      proguardFiles getDefaultProguardFile('proguard-android-optimize.txt')
+      signingConfig signingConfigs.release
+    }
+  }
+
+  compileOptions {
+    sourceCompatibility JavaVersion.VERSION_17
+    targetCompatibility JavaVersion.VERSION_17
+  }
+
+  kotlinOptions {
+    jvmTarget = '17'
+  }
+
+  testOptions {
+    unitTests {
+      includeAndroidResources = true
+      all {
+        // Robolectric downloads Android framework jars; use the same Maven Central mirror as the build.
+        systemProperty 'robolectric.dependency.repo.url', 'https://maven-central.storage-download.googleapis.com/maven2'
+        // -Plive renders screenshots from live BoM and Essential Energy data.
+        systemProperty 'live', project.hasProperty('live') ? 'true' : 'false'
+      }
+    }
+  }
+}
+
+dependencies {
+  testImplementation 'junit:junit:4.13.2'
+  testImplementation 'org.robolectric:robolectric:4.14.1'
+}

@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 20/10/2026 created by Claude Opus 5.5 -->
+<!-- 20/10/2026 last modified by Claude Opus 5.5 -->
+<!-- themes.xml -->
+<!-- Darkish blue-grey theme (not black) using the platform Material theme, so no support library is needed. -->
+<resources>
+  <style name="AppTheme" parent="android:Theme.Material.NoActionBar">
+    <item name="android:windowBackground">@color/background</item>
+    <item name="android:statusBarColor">@color/background</item>
+    <item name="android:navigationBarColor">@color/background</item>
+    <item name="android:colorAccent">#FFB6C8</item>
+  </style>
+  <color name="background">#FF2B3038</color>
+</resources>

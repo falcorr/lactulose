@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 20/10/2026 created by Claude Opus 5.5 -->
+<!-- 20/10/2026 last modified by Claude Opus 5.5 -->
+<!-- launcher.xml -->
+<!-- App icon: a temperature line on the app's background colour. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+  android:width="48dp" android:height="48dp" android:viewportWidth="48" android:viewportHeight="48">
+  <path android:fillColor="#FF2B3038" android:pathData="M8,0h32a8,8 0 0 1 8,8v32a8,8 0 0 1 -8,8h-32a8,8 0 0 1 -8,-8v-32a8,8 0 0 1 8,-8z" />
+  <path android:strokeColor="#FFFFB74D" android:strokeWidth="3" android:strokeLineCap="round"
+    android:pathData="M8,32 L16,26 L24,28 L32,16 L40,20" />
+  <path android:strokeColor="#FF4FC3F7" android:strokeWidth="2" android:strokeLineCap="round"
+    android:pathData="M8,36 L16,31 L24,33 L32,22 L40,26" />
+</vector>

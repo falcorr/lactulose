@@ -1,0 +1,10 @@
+# 20/10/2026 created by Claude Opus 5.5
+# .gitignore
+/build/
+/app/build/
+/.gradle/
+/.kotlin/
+/local.properties
+*.jks
+*.keystore
+password.txt

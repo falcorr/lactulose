@@ -1,0 +1,8 @@
+// 20/10/2026 created by Claude Opus 5.5
+// 20/10/2026 last modified by Claude Opus 5.5
+// build.gradle
+// Pins the Android Gradle plugin and Kotlin versions for all modules.
+plugins {
+  id 'com.android.application' version '8.10.1' apply false
+  id 'org.jetbrains.kotlin.android' version '2.1.21' apply false
+}

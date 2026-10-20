@@ -1,0 +1,22 @@
+// 20/10/2026 created by Claude Opus 5.5
+// 20/10/2026 last modified by Claude Opus 5.5
+// settings.gradle
+// Declares the plugin and dependency repositories (Google's Maven Central mirror first, as Central
+// rate-limits) and the single app module.
+pluginManagement {
+  repositories {
+    google()
+    maven { url 'https://maven-central.storage-download.googleapis.com/maven2' }
+    maven { url 'https://repo1.maven.org/maven2' }
+    gradlePluginPortal()
+  }
+}
+dependencyResolutionManagement {
+  repositories {
+    google()
+    maven { url 'https://maven-central.storage-download.googleapis.com/maven2' }
+    maven { url 'https://repo1.maven.org/maven2' }
+  }
+}
+rootProject.name = 'lactulose'
+include ':app'

@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 20/10/2026 created by Claude Opus 5.5 -->
+<!-- 20/10/2026 last modified by Claude Opus 5.5 -->
+<!-- strings.xml -->
+<!-- All user-visible text. -->
+<resources>
+  <string name="app_name">Lactulose</string>
+  <string name="update">Update</string>
+  <string name="phone_location">Phone location</string>
+  <string name="now_label">Now</string>
+  <string name="temp_label">Temp</string>
+  <string name="feels_label">Feels</string>
+  <string name="lactulose_label">Lactulose</string>
+  <string name="dose_by_temp">%1$s by temp</string>
+  <string name="dose_by_feel">%1$s by feel</string>
+  <string name="dose_settings">Lactulose dose</string>
+  <string name="dose_settings_help">Dose follows the points below, straight lines between them, and never less than the floor dose. Below the floor temperature the floor counts instead. By feel, the floor is lowered by how far feels-like is below the temperature. The window dose is the average of every minute\'s dose.</string>
+  <string name="floor_temp_label">Floor temperature (°C)</string>
+  <string name="floor_dose_label">Dose at the floor (mL)</string>
+  <string name="dose_points_label">Dose points, one per line: °C then mL</string>
+  <string name="dose_settings_invalid">Not saved: temperatures must be -15 to 50 °C, doses 0.1 to 3.0 mL, and at least two points.</string>
+  <string name="reset">Defaults</string>
+  <string name="status_line">BoM observed %1$s · fetched %2$s</string>
+  <string name="range_line">Lactulose %1$s – %2$s</string>
+  <string name="thunder_observed">thunder observed %1$s</string>
+  <string name="locating">Finding phone location…</string>
+  <string name="downloading">Downloading from BoM…</string>
+  <string name="location_denied">Location permission refused, so phone location can\'t be used.</string>
+  <string name="outage_title">Essential Energy outages</string>
+  <string name="outage_title_at">Essential Energy outages at %1$s</string>
+  <string name="outage_not_set">Long-press here to set the place to check for outages. It is kept only on this phone.</string>
+  <string name="outage_settings">Outage place</string>
+  <string name="outage_settings_help">The point is kept only on this phone and sent nowhere; the app downloads Essential Energy\'s whole outage maps and checks them here.</string>
+  <string name="outage_name_label">Name to show (optional)</string>
+  <string name="outage_point_label">Point as latitude, longitude</string>
+  <string name="outage_use_phone">Use phone location</string>
+  <string name="outage_allow_location">Allow location, then tap Use phone location again.</string>
+  <string name="outage_clear">Clear</string>
+  <string name="outage_point_invalid">Not saved: enter latitude, longitude such as -33.87, 151.21.</string>
+  <string name="loading">Loading…</string>
+  <string name="updated">(updated %1$s)</string>
+  <string name="no_outages">No outages now, none planned in the next 14 days, and none seen in the last 7 days.</string>
+  <string name="no_update">No newer version found (installed version %1$s).</string>
+  <string name="update_downloading">Downloading version %1$s in your browser. Open the download when it finishes to install it.</string>
+  <string name="update_no_browser">No browser found. Download %1$s and open it to install.</string>
+  <string name="update_in_folder">Version %1$s is in your update folder: open %2$s in your Files app to install it.</string>
+  <string name="update_setup_hint">Long-press Update to choose an update folder or enter a GitHub token.</string>
+  <string name="update_setup">Update setup</string>
+  <string name="choose_folders">Choose update folders (e.g. Download/lactulose)</string>
+  <string name="github_token">GitHub access token</string>
+  <string name="github_token_help">Needed only while falcorr/lactulose is private: a fine-grained token with read-only access to that repository\'s contents. Leave empty for a public repository.</string>
+  <string name="forget_folders">Forget update folders</string>
+  <string name="folders_forgotten">Update folders forgotten.</string>
+  <string name="folders_saved">%1$d update folder(s) saved.</string>
+  <string name="refresh">Refresh</string>
+  <string name="hour_values">Temps</string>
+  <string name="today_label">Today</string>
+  <string name="snap_label">Window snap step (minutes)</string>
+  <string name="snap_invalid">Snap step not saved: it must be 1 to 120 minutes.</string>
+  <string name="version_line">v%1$s · updated %2$s</string>
+  <string name="rain_since_9am">Rain %1$smm since 9am</string>
+  <string name="outages_failed">Outages failed: %1$s</string>
+  <string name="pick_downloads">Choose or create a folder such as Download/lactulose (Android won\'t allow Download itself).</string>
+  <string name="pick_sd">Now choose or create a lactulose folder on the SD card, or go back to skip it.</string>
+</resources>
