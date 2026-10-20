@@ -1,7 +1,7 @@
 // 20/10/2026 created by Claude Opus 5.5
 // 20/10/2026 last modified by Claude Opus 5.5
 // geohash.kt
-// Encodes latitude and longitude as a geohash, the location key BoM's forecast service uses.
+// Encodes latitude and longitude as a geohash, the location key BoM's forecast service uses, and finds a cell's centre.
 package com.falcorr.lactulose.core
 
 // Geohash base-32 alphabet.
@@ -44,4 +44,31 @@ fun geohash(latDeg: Double, lonDeg: Double, precision: Int): String
     }
   }
   return out.toString()
+}
+
+
+// Returns the centre (lat, lon) of the cell named by hash, or null if it has a character geohashes don't use.
+fun geohashCentre(hash: String): Pair<Double, Double>?
+{
+  var latLow = -90.0
+  var latHigh = 90.0
+  var lonLow = -180.0
+  var lonHigh = 180.0
+  var evenBit = true
+
+  for (c in hash)
+  {
+    val value = GEOHASH_CHARS.indexOf(c)
+
+    if (value < 0) return null
+    for (bit in 4 downTo 0)
+    {
+      val on = (value shr bit) and 1 == 1
+
+      if (evenBit) { if (on) lonLow = (lonLow + lonHigh) / 2 else lonHigh = (lonLow + lonHigh) / 2 }
+      else { if (on) latLow = (latLow + latHigh) / 2 else latHigh = (latLow + latHigh) / 2 }
+      evenBit = !evenBit
+    }
+  }
+  return Pair((latLow + latHigh) / 2, (lonLow + lonHigh) / 2)
 }

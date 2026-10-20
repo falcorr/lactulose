@@ -33,7 +33,7 @@
   <string name="outage_settings_help">The point is kept only on this phone and sent nowhere; the app downloads Essential Energy\'s whole outage maps and checks them here.</string>
   <string name="outage_name_label">Name to show (optional)</string>
   <string name="outage_point_label">Point as latitude, longitude</string>
-  <string name="outage_use_phone">Use phone location (moved 50–100 m at random)</string>
+  <string name="outage_use_phone">Use phone location (moved 50–100 m, east through south to west)</string>
   <string name="outage_use_place">Use centre of %1$s</string>
   <string name="outage_allow_location">Allow location, then tap Use phone location again.</string>
   <string name="outage_clear">Clear</string>
@@ -68,4 +68,11 @@
   <string name="update_saved">Version %1$s saved as %2$s in your update folder. Open it in your Files app (My Files) to install.</string>
   <string name="update_download_failed">Update download failed: %1$s</string>
   <string name="update_need_folder">Version %1$s is available. Long-press Update and choose a folder such as Download/lactulose so it can be saved there.</string>
+  <string name="widget_name">Lactulose doses</string>
+  <string name="widget_updated">updated %1$s</string>
+  <string name="widget_failed">sync failed %1$s</string>
+  <string name="widget_no_data">open the app once</string>
+  <string name="widget_sync">Sync</string>
+  <string name="add_widget">Add doses widget to home screen</string>
+  <string name="widget_pin_unsupported">This home screen can\'t add widgets from apps: long-press the home screen, choose Widgets, and find Lactulose.</string>
 </resources>

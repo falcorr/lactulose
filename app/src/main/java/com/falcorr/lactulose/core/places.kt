@@ -26,6 +26,11 @@ private const val METRES_PER_DEGREE = 111_320.0
 const val MIN_BLUR_M = 50.0
 const val MAX_BLUR_M = 100.0
 
+// The directions the offset may take, as compass bearings in degrees clockwise from north: from just south of
+// east, through south, to just north of west, as the user drew it (20/10/2026); never northward.
+const val MIN_BLUR_BEARING = 95.0
+const val MAX_BLUR_BEARING = 285.0
+
 
 // Returns the point metres away from (lat, lon) in the direction bearingRad (0 = north, clockwise).
 fun offsetPoint(lat: Double, lon: Double, metres: Double, bearingRad: Double): Pair<Double, Double> =
@@ -33,7 +38,8 @@ fun offsetPoint(lat: Double, lon: Double, metres: Double, bearingRad: Double): P
     lon + metres * Math.sin(bearingRad) / (METRES_PER_DEGREE * Math.cos(Math.toRadians(lat))))
 
 
-// Returns (lat, lon) moved MIN_BLUR_M to MAX_BLUR_M in a random direction, so the stored outage point is never the
-// phone's exact position.
+// Returns (lat, lon) moved MIN_BLUR_M to MAX_BLUR_M in a random direction between MIN_BLUR_BEARING and
+// MAX_BLUR_BEARING, so the stored outage point is never the phone's exact position.
 fun blurPoint(lat: Double, lon: Double, random: kotlin.random.Random = kotlin.random.Random.Default): Pair<Double, Double> =
-  offsetPoint(lat, lon, MIN_BLUR_M + random.nextDouble() * (MAX_BLUR_M - MIN_BLUR_M), random.nextDouble() * 2 * Math.PI)
+  offsetPoint(lat, lon, MIN_BLUR_M + random.nextDouble() * (MAX_BLUR_M - MIN_BLUR_M),
+    Math.toRadians(MIN_BLUR_BEARING + random.nextDouble() * (MAX_BLUR_BEARING - MIN_BLUR_BEARING)))

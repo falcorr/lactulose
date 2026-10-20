@@ -3,7 +3,7 @@
 // selectionwindow.kt
 // Time rules for the graph: the visible range, local clock alignment, and where the fixed-width selection
 // window may start (snapped to a configurable local step, 30 minutes by default, starting at the first step at or
-// after now,
+// after now, or, once unlocked, anywhere on the graph's past 3 h,
 // ending by now + 21 h).
 package com.falcorr.lactulose.core
 
@@ -52,10 +52,13 @@ fun earliestWindowStart(nowMs: Long, zone: TimeZone, stepMs: Long = DEFAULT_SNAP
 
 
 // Returns the allowed window start nearest requestedMs: the nearest local multiple of stepMs, kept between
-// earliestWindowStart and latestWindowStart.
-fun snapWindowStart(requestedMs: Long, nowMs: Long, zone: TimeZone, stepMs: Long = DEFAULT_SNAP_MIN * MINUTE_MS): Long
+// earliestWindowStart and latestWindowStart. With allowPast (the window unlocked) it may start as early as the first
+// snap time on the graph, 3 h before now.
+fun snapWindowStart(requestedMs: Long, nowMs: Long, zone: TimeZone, stepMs: Long = DEFAULT_SNAP_MIN * MINUTE_MS,
+  allowPast: Boolean = false): Long
 {
   val snapped = floorLocal(requestedMs + stepMs / 2, stepMs, zone)
+  val earliest = earliestWindowStart(if (allowPast) nowMs - GRAPH_BEFORE_MS else nowMs, zone, stepMs)
 
-  return minOf(maxOf(snapped, earliestWindowStart(nowMs, zone, stepMs)), latestWindowStart(nowMs, zone, stepMs))
+  return minOf(maxOf(snapped, earliest), latestWindowStart(nowMs, zone, stepMs))
 }

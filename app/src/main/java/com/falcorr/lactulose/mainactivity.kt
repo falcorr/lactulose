@@ -51,6 +51,7 @@ import com.falcorr.lactulose.core.DEFAULT_DOSE_POINTS
 import com.falcorr.lactulose.core.formatDosePoints
 import com.falcorr.lactulose.core.parseDosePoints
 import com.falcorr.lactulose.core.geohash
+import com.falcorr.lactulose.core.geohashCentre
 import com.falcorr.lactulose.core.blurPoint
 import com.falcorr.lactulose.data.Outage
 import com.falcorr.lactulose.data.Repository
@@ -71,6 +72,7 @@ import com.falcorr.lactulose.ui.rainRange
 import com.falcorr.lactulose.ui.stormLabel
 import com.falcorr.lactulose.ui.trim
 import com.falcorr.lactulose.update.ApkUpdater
+import com.falcorr.lactulose.widget.DosesWidget
 import java.util.Locale
 import java.util.concurrent.Executors
 
@@ -79,20 +81,25 @@ import java.util.concurrent.Executors
 private const val KEY_WINDOW_START = "windowStart"
 
 // Preference key for the chosen place index; the last index means phone location.
-private const val KEY_PLACE = "place"
+internal const val KEY_PLACE = "place"
 
 // Preference keys for the dose floor temperature and the dose it corresponds to.
-private const val KEY_FLOOR_C = "floorC"
-private const val KEY_FLOOR_ML = "floorMl"
-private const val KEY_DOSE_POINTS = "dosePoints"
+internal const val KEY_FLOOR_C = "floorC"
+internal const val KEY_FLOOR_ML = "floorMl"
+internal const val KEY_DOSE_POINTS = "dosePoints"
 
 // Preference keys for the outage point and its display name, entered on the phone and never in the code.
 private const val KEY_OUTAGE_LAT = "outageLat"
 private const val KEY_OUTAGE_LON = "outageLon"
 private const val KEY_OUTAGE_NAME = "outageName"
 
+// Name of the preference file the activity and the home-screen widget share (the activity's own, by Android's
+// naming), and the key for when the next manual refresh is allowed, so the widget obeys the same limit.
+internal const val PREFS_NAME = "MainActivity"
+internal const val KEY_REFRESH_ALLOWED_AT = "refreshAllowedAt"
+
 // Preference key for the window's snap step in minutes.
-private const val KEY_SNAP_MIN = "snapMinutes"
+internal const val KEY_SNAP_MIN = "snapMinutes"
 
 // Preference key for whether each hour's values are printed on the graph.
 private const val KEY_SHOW_VALUES = "showValues"
@@ -106,7 +113,7 @@ private const val COLOUR_FAIL = 0xFFEF5350.toInt()
 
 // Weather and outages are refetched once they are 15 minutes old or more (user, 20/10/2026). Each period gets a
 // fresh random extra of up to REFRESH_JITTER_MS after every download, so requests don't arrive on a fixed schedule.
-private const val WEATHER_REFRESH_MS = 15 * MINUTE_MS
+internal const val WEATHER_REFRESH_MS = 15 * MINUTE_MS
 private const val OUTAGE_REFRESH_MS = 15 * MINUTE_MS
 private const val REFRESH_JITTER_MS = MINUTE_MS
 private const val MANUAL_REFRESH_GAP_MS = 60_000L
@@ -123,6 +130,24 @@ private const val PICK_INTERNAL = 1
 private const val PICK_SD = 2
 private const val ASK_LOCATION = 3
 private const val ASK_LOCATION_OUTAGES = 4
+
+
+// Returns the saved dose rule, or the default one.
+internal fun loadDoseRule(prefs: android.content.SharedPreferences): DoseRule =
+  DoseRule(prefs.getFloat(KEY_FLOOR_C, DEFAULT_FLOOR_C.toFloat()).toDouble(),
+    prefs.getFloat(KEY_FLOOR_ML, DEFAULT_FLOOR_ML.toFloat()).toDouble(),
+    parseDosePoints(prefs.getString(KEY_DOSE_POINTS, "") ?: "") ?: DEFAULT_DOSE_POINTS)
+
+
+// Takes the one manual refresh allowed per minute plus a few random seconds, shared by the Refresh button and the
+// widget: returns true and starts the next wait if allowed now, else false.
+internal fun claimManualRefresh(prefs: android.content.SharedPreferences, nowMs: Long): Boolean
+{
+  if (nowMs < prefs.getLong(KEY_REFRESH_ALLOWED_AT, 0L)) return false
+  prefs.edit().putLong(KEY_REFRESH_ALLOWED_AT,
+    nowMs + MANUAL_REFRESH_GAP_MS + kotlin.random.Random.nextLong(MANUAL_REFRESH_JITTER_MS)).apply()
+  return true
+}
 
 
 class MainActivity : Activity()
@@ -169,7 +194,6 @@ class MainActivity : Activity()
   private lateinit var versionText: TextView
 
   // Manual refresh state: when it was last used, and whether the next loads must download regardless of age.
-  private var lastManualRefreshMs = 0L
   private var forceRefresh = false
 
   // Current random extras added to the refresh periods.
@@ -213,11 +237,7 @@ class MainActivity : Activity()
     repository = Repository(applicationContext)
     updater = ApkUpdater(applicationContext)
     placeIndex = getPreferences(MODE_PRIVATE).getInt(KEY_PLACE, 0).coerceIn(0, FIXED_PLACES.size)
-    doseRule = getPreferences(MODE_PRIVATE).let {
-      DoseRule(it.getFloat(KEY_FLOOR_C, DEFAULT_FLOOR_C.toFloat()).toDouble(),
-        it.getFloat(KEY_FLOOR_ML, DEFAULT_FLOOR_ML.toFloat()).toDouble(),
-        parseDosePoints(it.getString(KEY_DOSE_POINTS, "") ?: "") ?: DEFAULT_DOSE_POINTS)
-    }
+    doseRule = loadDoseRule(getPreferences(MODE_PRIVATE))
     setContentView(buildContent())
     graph.onWindowChanged = { showAverages() }
     graph.setFloor(doseRule.floorC)
@@ -234,6 +254,18 @@ class MainActivity : Activity()
   {
     super.onResume()
     minuteTick.run()
+    showRefreshWait()
+  }
+
+
+  // Greys out Refresh until the shared manual-refresh wait (which the widget may have started) is over.
+  private fun showRefreshWait()
+  {
+    val wait = getPreferences(MODE_PRIVATE).getLong(KEY_REFRESH_ALLOWED_AT, 0L) - System.currentTimeMillis()
+
+    refreshButton.isEnabled = wait <= 0
+    refreshButton.alpha = if (wait <= 0) 1f else 0.4f
+    if (wait > 0) mainHandler.postDelayed({ showRefreshWait() }, wait + 50)
   }
 
 
@@ -412,6 +444,10 @@ class MainActivity : Activity()
     snapField.inputType = android.text.InputType.TYPE_CLASS_NUMBER
     snapField.setText(getPreferences(MODE_PRIVATE).getInt(KEY_SNAP_MIN, DEFAULT_SNAP_MIN).toString())
     form.addView(snapField)
+    form.addView(Button(this).apply {
+      text = getString(R.string.add_widget)
+      setOnClickListener { addWidget() }
+    })
     scroll.addView(form)
     android.app.AlertDialog.Builder(this)
       .setTitle(R.string.dose_settings)
@@ -441,11 +477,22 @@ class MainActivity : Activity()
   }
 
 
+  // Asks the home screen to add the doses widget; Android shows its own confirmation.
+  private fun addWidget()
+  {
+    val manager = getSystemService(android.appwidget.AppWidgetManager::class.java)
+
+    if (manager == null || !manager.isRequestPinAppWidgetSupported) toast(getString(R.string.widget_pin_unsupported))
+    else manager.requestPinAppWidget(android.content.ComponentName(this, DosesWidget::class.java), null, null)
+  }
+
+
   // Stores the window's snap step in minutes and applies it.
   private fun saveSnap(minutes: Int)
   {
     getPreferences(MODE_PRIVATE).edit().putInt(KEY_SNAP_MIN, minutes).apply()
     graph.setSnapMinutes(minutes)
+    DosesWidget.refreshAll(this)
   }
 
 
@@ -457,6 +504,7 @@ class MainActivity : Activity()
     getPreferences(MODE_PRIVATE).edit().putFloat(KEY_FLOOR_C, rule.floorC.toFloat())
       .putFloat(KEY_FLOOR_ML, rule.floorMl.toFloat()).putString(KEY_DOSE_POINTS, formatDosePoints(rule.points)).apply()
     showAverages()
+    DosesWidget.refreshAll(this)
   }
 
 
@@ -490,19 +538,13 @@ class MainActivity : Activity()
 
 
   // Refresh button: downloads weather and outages now, whatever their age, then stays greyed out for a minute plus
-  // a few random seconds so repeated taps can't hammer the sources.
+  // a few random seconds so repeated taps can't hammer the sources. The wait is shared with the widget.
   private fun onRefreshTapped()
   {
     val now = System.currentTimeMillis()
 
-    if (now - lastManualRefreshMs < MANUAL_REFRESH_GAP_MS || weatherBusy || outagesBusy) return
-    lastManualRefreshMs = now
-    refreshButton.isEnabled = false
-    refreshButton.alpha = 0.4f
-    mainHandler.postDelayed({
-      refreshButton.isEnabled = true
-      refreshButton.alpha = 1f
-    }, MANUAL_REFRESH_GAP_MS + kotlin.random.Random.nextLong(MANUAL_REFRESH_JITTER_MS))
+    if (weatherBusy || outagesBusy || !claimManualRefresh(getPreferences(MODE_PRIVATE), now)) return
+    showRefreshWait()
     forceRefresh = true
     weatherError = ""
     outagesFetchedMs = 0L
@@ -516,7 +558,8 @@ class MainActivity : Activity()
   {
     if (position == placeIndex && snapshot != null) return
     placeIndex = position
-    getPreferences(MODE_PRIVATE).edit().putInt(KEY_PLACE, position).apply()
+    getPreferences(MODE_PRIVATE).edit().putInt(KEY_PLACE, position).commit()
+    DosesWidget.refreshAll(this)
     snapshot = null
     weatherError = ""
     weatherFailNote = ""
@@ -558,7 +601,15 @@ class MainActivity : Activity()
     statusText.text = getString(R.string.locating)
     PhoneLocation(this).request { lat, lon, error ->
       if (error.isNotEmpty()) failWeather(error)
-      else loadWeatherFor(Place("", geohash(lat, lon, 6), lat, lon), "phone")
+      else
+      {
+        // Only the geohash cell (about 1.2 x 0.6 km) is kept and sent to BoM; the exact fix is dropped here and
+        // its cell's centre stands in for it.
+        val cell = geohash(lat, lon, 6)
+        val centre = geohashCentre(cell) ?: Pair(lat, lon)
+
+        loadWeatherFor(Place("", cell, centre.first, centre.second), "phone")
+      }
     }
   }
 
@@ -621,6 +672,7 @@ class MainActivity : Activity()
           weatherFailNote = ""
           showFailures()
           show(result.value!!)
+          DosesWidget.refreshAll(this)
         }
         else failWeather(result.error)
       }

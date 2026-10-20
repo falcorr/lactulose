@@ -76,11 +76,12 @@ class BomSource(private val fetch: SecureFetch, private val stations: () -> Stat
   }
 
 
-  // Returns BoM's name for the place's geohash, or its coordinates when BoM has no name.
+  // Returns BoM's name for the place's geohash, or "Phone location" when BoM has no name; coordinates are never
+  // shown or stored as a name.
   private fun locationName(place: Place): String
   {
     val result = fetch.get(BOM_API + place.geohash)
-    val fallback = String.format(java.util.Locale.ROOT, "%.3f, %.3f", place.lat, place.lon)
+    val fallback = if (place.name.isNotEmpty()) place.name else "Phone location"
 
     if (!result.ok) return fallback
     return JSONObject(result.value!!).optJSONObject("data")?.optString("name", fallback) ?: fallback

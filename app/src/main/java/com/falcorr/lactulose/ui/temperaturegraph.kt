@@ -47,6 +47,8 @@ private const val COLOUR_LABEL = 0xFFB0B8C4.toInt()
 private const val COLOUR_LABEL_MAIN = 0xFFFFFFFF.toInt()
 private const val COLOUR_NOW = 0xFFD0D0D0.toInt()
 private const val COLOUR_WINDOW_FILL = 0x33FFB6C8
+private const val COLOUR_WINDOW_PAST = 0x33FFE4EC
+private const val COLOUR_LOCK = 0xE6FFD6E0.toInt()
 private const val COLOUR_WINDOW_EDGE = 0x80FFB6C8.toInt()
 private const val COLOUR_RAIN_BAR = 0x9981D4FA.toInt()
 private const val COLOUR_RAIN_LABEL = 0xE681D4FA.toInt()
@@ -107,6 +109,17 @@ class TemperatureGraph(context: Context) : View(context)
     strokeWidth = density * 0.8f
   }
   private val windowFill = Paint().apply { color = COLOUR_WINDOW_FILL }
+  private val windowPastFill = Paint().apply { color = COLOUR_WINDOW_PAST }
+  private val lockPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+    color = COLOUR_LOCK
+    strokeWidth = 1.4f * density
+    style = Paint.Style.STROKE
+    strokeCap = Paint.Cap.ROUND
+  }
+
+  // The lock button's area in the window's top-left corner, set when drawn, and whether a touch began on it.
+  private val lockRect = android.graphics.RectF()
+  private var lockTouched = false
   private val windowEdge = Paint().apply {
     color = COLOUR_WINDOW_EDGE
     strokeWidth = density
@@ -153,6 +166,11 @@ class TemperatureGraph(context: Context) : View(context)
   var windowStartMs = 0L
     private set
   private var grabOffsetPx = 0f
+
+  // Whether the window is locked to start no earlier than the first snap time at or after now (the default);
+  // unlocked it may move back over the graph's past 3 h (user, 20/10/2026).
+  var locked = true
+    private set
 
   // Step the window start snaps to, in ms; setSnapMinutes changes it.
   private var snapMs = DEFAULT_SNAP_MIN * MINUTE_MS
@@ -214,9 +232,18 @@ class TemperatureGraph(context: Context) : View(context)
 
     nowMs = timeMs
     zone = TimeZone.getDefault()
-    windowStartMs = snapWindowStart(windowStart, nowMs, zone, snapMs)
+    windowStartMs = snapWindowStart(windowStart, nowMs, zone, snapMs, !locked)
     if (windowStartMs != previous) onWindowChanged(windowStartMs)
     invalidate()
+  }
+
+
+  // Locks or unlocks the window. Locking while it starts before the first snap time at or after now moves it there
+  // at once.
+  fun setLocked(lock: Boolean)
+  {
+    locked = lock
+    setNow(nowMs)
   }
 
 
@@ -321,12 +348,15 @@ class TemperatureGraph(context: Context) : View(context)
     if (showValues) drawValues(canvas, rangeStart, rangeEnd)
 
     // Selection window drawn over the lines so they stay visible through its faint fill.
+    // The part of the window before now is a slightly brighter pink at the same transparency.
     x = xOf(windowStartMs)
-    canvas.drawRect(x, topMargin, xOf(windowStartMs + WINDOW_MS), bottom, windowFill)
+    if (windowStartMs < nowMs) canvas.drawRect(x, topMargin, xOf(minOf(nowMs, windowStartMs + WINDOW_MS)), bottom, windowPastFill)
+    canvas.drawRect(xOf(maxOf(nowMs, windowStartMs)), topMargin, xOf(windowStartMs + WINDOW_MS), bottom, windowFill)
     canvas.drawLine(x, topMargin, x, bottom, windowEdge)
     canvas.drawLine(xOf(windowStartMs + WINDOW_MS), topMargin, xOf(windowStartMs + WINDOW_MS), bottom, windowEdge)
     canvas.restore()
     drawWindowEdgeValues(canvas, bottom)
+    drawLock(canvas, x)
 
     x = xOf(nowMs)
     canvas.drawLine(x, 0f, x, bottom, nowPaint)
@@ -491,6 +521,30 @@ class TemperatureGraph(context: Context) : View(context)
   }
 
 
+  // Draws the small lock button in the window's top-left corner (window left edge at x): closed when locked, with
+  // its shackle raised and swung open when unlocked. Records its touch area, a little larger than the icon.
+  private fun drawLock(canvas: Canvas, x: Float)
+  {
+    val size = 9f * density
+    val left = x + 4f * density
+    val top = topMargin + 5f * density
+    val bodyTop = top + size * 0.45f
+    val shackleLeft = left + size * 0.2f
+    val shackleRight = left + size * 0.8f
+    val lift = if (locked) 0f else size * 0.25f
+
+    lockPaint.style = Paint.Style.FILL
+    canvas.drawRoundRect(left, bodyTop, left + size, top + size, 1.2f * density, 1.2f * density, lockPaint)
+    lockPaint.style = Paint.Style.STROKE
+    linePath.rewind()
+    linePath.moveTo(shackleLeft, bodyTop - (if (locked) 0f else lift))
+    linePath.cubicTo(shackleLeft, top - lift - size * 0.2f, shackleRight, top - lift - size * 0.2f, shackleRight, bodyTop - lift)
+    if (locked) linePath.lineTo(shackleRight, bodyTop)
+    canvas.drawPath(linePath, lockPaint)
+    lockRect.set(left - 6f * density, top - 8f * density, left + size + 8f * density, top + size + 6f * density)
+  }
+
+
   @SuppressLint("ClickableViewAccessibility")
   override fun onTouchEvent(event: MotionEvent): Boolean
   {
@@ -498,6 +552,14 @@ class TemperatureGraph(context: Context) : View(context)
     val windowRight = xOf(windowStartMs + WINDOW_MS)
     var start = 0L
 
+    // A tap on the lock button toggles the lock instead of moving the window.
+    if (event.actionMasked == MotionEvent.ACTION_DOWN) lockTouched = lockRect.contains(event.x, event.y)
+    if (lockTouched)
+    {
+      if (event.actionMasked == MotionEvent.ACTION_UP && lockRect.contains(event.x, event.y)) setLocked(!locked)
+      if (event.actionMasked == MotionEvent.ACTION_DOWN) parent?.requestDisallowInterceptTouchEvent(true)
+      return true
+    }
     when (event.actionMasked)
     {
       MotionEvent.ACTION_DOWN ->
@@ -509,7 +571,7 @@ class TemperatureGraph(context: Context) : View(context)
       MotionEvent.ACTION_MOVE -> {}
       else -> return true
     }
-    start = snapWindowStart(timeOf(event.x - grabOffsetPx), nowMs, zone, snapMs)
+    start = snapWindowStart(timeOf(event.x - grabOffsetPx), nowMs, zone, snapMs, !locked)
     if (start != windowStartMs)
     {
       windowStartMs = start

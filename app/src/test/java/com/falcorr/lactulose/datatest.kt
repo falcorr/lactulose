@@ -176,7 +176,8 @@ class DataTest
     val random = kotlin.random.Random(7)
     val bearings = HashSet<Int>()
 
-    // BoM's Dubbo point, moved many times: always 50 to 100 m away (great-circle distance), in all directions.
+    // BoM's Dubbo point, moved many times: always 50 to 100 m away (great-circle distance), at bearings from 95°
+    // through south to 285°, spread across that whole arc.
     for (i in 0 until 500)
     {
       val moved = com.falcorr.lactulose.core.blurPoint(-32.2202, 148.5736, random)
@@ -187,8 +188,28 @@ class DataTest
       val metres = 2 * 6_371_000.0 * Math.asin(Math.sqrt(a))
 
       assertTrue("moved $metres m", metres in 49.5..100.5)
-      bearings.add(((Math.toDegrees(Math.atan2(dLon * Math.cos(Math.toRadians(-32.2202)), dLat)) + 360) % 360 / 45).toInt())
+      val bearing = (Math.toDegrees(Math.atan2(dLon * Math.cos(Math.toRadians(-32.2202)), dLat)) + 360) % 360
+
+      assertTrue("bearing $bearing", bearing in 94.9..285.1)
+      bearings.add(((bearing - 95) / 19).toInt())
     }
-    assertEquals(8, bearings.size)
+    assertEquals(10, bearings.size)
+  }
+
+
+  @Test
+  fun decodesGeohashCentreAndSharesRefreshLimit()
+  {
+    val centre = com.falcorr.lactulose.core.geohashCentre("r638sy")!!
+    val prefs = org.robolectric.RuntimeEnvironment.getApplication().getSharedPreferences("limitTest", 0)
+
+    // The centre of BoM's Dubbo cell lies in that cell, within about 700 m of BoM's point.
+    assertEquals("r638sy", geohash(centre.first, centre.second, 6))
+    assertTrue(Math.abs(centre.first + 32.2202) < 0.006 && Math.abs(centre.second - 148.5736) < 0.006)
+    assertEquals(null, com.falcorr.lactulose.core.geohashCentre("r6a"))
+    // One manual refresh per minute plus up to 8 s, whether from the app or the widget.
+    assertTrue(claimManualRefresh(prefs, 1_000_000L))
+    assertFalse(claimManualRefresh(prefs, 1_000_000L + 59_000L))
+    assertTrue(claimManualRefresh(prefs, 1_000_000L + 68_001L))
   }
 }

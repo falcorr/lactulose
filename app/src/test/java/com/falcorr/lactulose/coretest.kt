@@ -72,6 +72,9 @@ class CoreTest
     assertEquals(latestWindowStart(now, sydney, 15 * MINUTE_MS), snapWindowStart(now + 30 * HOUR_MS, now, sydney, 15 * MINUTE_MS))
     assertTrue(latestWindowStart(now, sydney, 15 * MINUTE_MS) + WINDOW_MS <= now + 21 * HOUR_MS)
     assertTrue(latestWindowStart(now, sydney, 15 * MINUTE_MS) + WINDOW_MS > now + 21 * HOUR_MS - 15 * MINUTE_MS)
+    // Unlocked, the window may start back to the first quarter within the graph's past 3 h, but no further.
+    assertEquals(base - HOUR_MS, snapWindowStart(base - HOUR_MS, now, sydney, 15 * MINUTE_MS, allowPast = true))
+    assertEquals(base - 3 * HOUR_MS + 15 * MINUTE_MS, snapWindowStart(now - 5 * HOUR_MS, now, sydney, 15 * MINUTE_MS, true))
     // The default step is 30 minutes.
     assertEquals(base + 30 * MINUTE_MS, snapWindowStart(base + 20 * MINUTE_MS, now, sydney))
     assertEquals(base + 30 * MINUTE_MS, snapWindowStart(base + 12 * MINUTE_MS + 30 * MINUTE_MS, now, sydney))

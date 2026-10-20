@@ -4,8 +4,9 @@
 <!-- AndroidManifest.xml -->
 <!-- Declares the single portrait-only screen. Permissions: internet for BoM and Essential Energy, approximate or
      precise location only for the phone-location option. No permission to install apps: updates are installed by
-     Android's own package installer from the browser or Files app.
-     Backups are off because the only stored data is caches that are refetched. -->
+     Android's own package installer from the Files app. Also declares the home-screen doses widget.
+     Backups and device-to-device transfers are off, so nothing stored here (such as the outage point) leaves the
+     phone that way. -->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
   <uses-permission android:name="android.permission.INTERNET" />
@@ -17,6 +18,7 @@
     android:icon="@drawable/launcher"
     android:theme="@style/AppTheme"
     android:allowBackup="false"
+    android:dataExtractionRules="@xml/data_extraction_rules"
     android:usesCleartextTraffic="false"
     android:supportsRtl="false">
     <activity
@@ -30,5 +32,15 @@
         <category android:name="android.intent.category.LAUNCHER" />
       </intent-filter>
     </activity>
+    <!-- The home-screen doses widget; only the system and this app send it broadcasts. -->
+    <receiver
+      android:name=".widget.DosesWidget"
+      android:label="@string/widget_name"
+      android:exported="false">
+      <intent-filter>
+        <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+      </intent-filter>
+      <meta-data android:name="android.appwidget.provider" android:resource="@xml/widget_doses_info" />
+    </receiver>
   </application>
 </manifest>

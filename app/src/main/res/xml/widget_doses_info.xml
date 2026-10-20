@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 20/10/2026 created by Claude Opus 5.5 -->
+<!-- widget_doses_info.xml -->
+<!-- Describes the 2x1 doses widget. The system's own update period (30 minutes, Android's minimum) is a backup;
+     the widget sets its own 15-minute alarm. -->
+<appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
+  android:minWidth="110dp"
+  android:minHeight="40dp"
+  android:targetCellWidth="2"
+  android:targetCellHeight="1"
+  android:updatePeriodMillis="1800000"
+  android:initialLayout="@layout/widget_doses"
+  android:previewLayout="@layout/widget_doses"
+  android:description="@string/widget_name"
+  android:resizeMode="horizontal"
+  android:widgetCategory="home_screen" />

@@ -104,6 +104,17 @@ class ScreenshotTest
       as android.widget.Button).performClick()
     org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle()
     save(activity.window.decorView, 2280, if (live) "main-live-values.png" else "main-values.png")
+    // Unlocked and dragged back 2 h: the part before now is brighter and the lock shows open.
+    (MainActivity::class.java.getDeclaredField("graph").apply { isAccessible = true }.get(activity)
+      as com.falcorr.lactulose.ui.TemperatureGraph).apply {
+      setLocked(false)
+      setNow(System.currentTimeMillis(), System.currentTimeMillis() - 2 * HOUR_MS)
+    }
+    org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle()
+    save(activity.window.decorView, 1100, if (live) "main-live-unlocked.png" else "main-unlocked.png")
+    (MainActivity::class.java.getDeclaredField("graph").apply { isAccessible = true }.get(activity)
+      as com.falcorr.lactulose.ui.TemperatureGraph).setLocked(true)
+    org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle()
     // A failed refresh: the red note appears under Refresh and the loaded data stays.
     MainActivity::class.java.getDeclaredMethod("failWeather", String::class.java).apply { isAccessible = true }
       .invoke(activity, "HTTP 503")
@@ -114,6 +125,37 @@ class ScreenshotTest
     MainActivity::class.java.getDeclaredMethod("showOutageSettings").apply { isAccessible = true }.invoke(activity)
     org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle()
     saveDialog(org.robolectric.shadows.ShadowDialog.getLatestDialog(), if (live) "outage-live.png" else "outage.png")
+  }
+
+
+  @Test
+  fun rendersWidget()
+  {
+    val context = org.robolectric.RuntimeEnvironment.getApplication()
+    val now = System.currentTimeMillis()
+    val snapshot = sampleSnapshot(now - 4 * 60_000L)
+    val names = listOf("widget.png", "widget-syncing.png", "widget-failed.png")
+    val states = listOf(Pair(false, false), Pair(true, false), Pair(false, true))
+
+    TimeZone.setDefault(TimeZone.getTimeZone("Australia/Sydney"))
+    // The widget as a 2x1 home-screen cell (about 146 x 70 dp at 2.625 px per dp), in each of its states.
+    for (i in names.indices)
+    {
+      val frame = android.widget.FrameLayout(context)
+      val views = com.falcorr.lactulose.widget.DosesWidget.views(context, snapshot, now, states[i].first, states[i].second)
+      val widget = views.apply(context, frame)
+      val bitmap = Bitmap.createBitmap(383, 184, Bitmap.Config.ARGB_8888)
+      val canvas = Canvas(bitmap)
+
+      frame.addView(widget)
+      frame.measure(android.view.View.MeasureSpec.makeMeasureSpec(383, android.view.View.MeasureSpec.EXACTLY),
+        android.view.View.MeasureSpec.makeMeasureSpec(184, android.view.View.MeasureSpec.EXACTLY))
+      frame.layout(0, 0, 383, 184)
+      canvas.drawColor(0xFF6A7F8F.toInt())
+      frame.draw(canvas)
+      File(SHOT_DIR).mkdirs()
+      File(SHOT_DIR, names[i]).outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
+    }
   }
 
 
