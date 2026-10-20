@@ -2,7 +2,8 @@
 // 20/10/2026 last modified by Claude Opus 5.5
 // places.kt
 // The places offered in the location drop-down. The point checked for power outages is personal, so it is never
-// in the code: it is entered on the phone and kept only there.
+// in the code: it is entered on the phone and kept only there, taken from the phone's position moved 50 to 100 m
+// in a random direction, or from the drop-down place.
 package com.falcorr.lactulose.core
 
 
@@ -16,3 +17,23 @@ val FIXED_PLACES = listOf(
   Place("Branxton", "r65whn", -32.6596, 151.3532),
   Place("Sydney", "r3gx2s", -33.8571, 151.1993)
 )
+
+
+// Metres per degree of latitude, near enough everywhere for offsets of a few hundred metres.
+private const val METRES_PER_DEGREE = 111_320.0
+
+// The range of the random offset applied to the phone's position for the outage point (user, 20/10/2026).
+const val MIN_BLUR_M = 50.0
+const val MAX_BLUR_M = 100.0
+
+
+// Returns the point metres away from (lat, lon) in the direction bearingRad (0 = north, clockwise).
+fun offsetPoint(lat: Double, lon: Double, metres: Double, bearingRad: Double): Pair<Double, Double> =
+  Pair(lat + metres * Math.cos(bearingRad) / METRES_PER_DEGREE,
+    lon + metres * Math.sin(bearingRad) / (METRES_PER_DEGREE * Math.cos(Math.toRadians(lat))))
+
+
+// Returns (lat, lon) moved MIN_BLUR_M to MAX_BLUR_M in a random direction, so the stored outage point is never the
+// phone's exact position.
+fun blurPoint(lat: Double, lon: Double, random: kotlin.random.Random = kotlin.random.Random.Default): Pair<Double, Double> =
+  offsetPoint(lat, lon, MIN_BLUR_M + random.nextDouble() * (MAX_BLUR_M - MIN_BLUR_M), random.nextDouble() * 2 * Math.PI)

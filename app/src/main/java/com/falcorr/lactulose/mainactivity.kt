@@ -51,6 +51,7 @@ import com.falcorr.lactulose.core.DEFAULT_DOSE_POINTS
 import com.falcorr.lactulose.core.formatDosePoints
 import com.falcorr.lactulose.core.parseDosePoints
 import com.falcorr.lactulose.core.geohash
+import com.falcorr.lactulose.core.blurPoint
 import com.falcorr.lactulose.data.Outage
 import com.falcorr.lactulose.data.Repository
 import com.falcorr.lactulose.io.PhoneLocation
@@ -849,6 +850,7 @@ class MainActivity : Activity()
     val nameField = android.widget.EditText(this)
     val pointField = android.widget.EditText(this)
     val usePhone = Button(this)
+    val usePlace = Button(this)
     val point = outagePoint()
 
     form.orientation = LinearLayout.VERTICAL
@@ -868,11 +870,24 @@ class MainActivity : Activity()
         toast(getString(R.string.outage_allow_location))
       }
       else PhoneLocation(this).request { lat, lon, error ->
+        // The phone's position is moved 50 to 100 m in a random direction before it is shown or kept.
+        val blurred = blurPoint(lat, lon)
+
         if (error.isNotEmpty()) toast(error)
-        else pointField.setText(String.format(Locale.ROOT, "%.6f, %.6f", lat, lon))
+        else pointField.setText(String.format(Locale.ROOT, "%.5f, %.5f", blurred.first, blurred.second))
       }
     }
     form.addView(usePhone)
+    // The drop-down place's BoM point, e.g. the centre of Dubbo; not offered while phone location is chosen.
+    if (placeIndex < FIXED_PLACES.size)
+    {
+      usePlace.text = getString(R.string.outage_use_place, FIXED_PLACES[placeIndex].name)
+      usePlace.setOnClickListener {
+        pointField.setText(String.format(Locale.ROOT, "%.4f, %.4f", FIXED_PLACES[placeIndex].lat, FIXED_PLACES[placeIndex].lon))
+        if (nameField.text.isBlank()) nameField.setText(FIXED_PLACES[placeIndex].name)
+      }
+      form.addView(usePlace)
+    }
     android.app.AlertDialog.Builder(this)
       .setTitle(R.string.outage_settings)
       .setMessage(R.string.outage_settings_help)

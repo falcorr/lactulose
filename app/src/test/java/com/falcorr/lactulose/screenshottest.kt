@@ -110,6 +110,10 @@ class ScreenshotTest
     org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle()
     assertTrue(loaded(activity, "snapshot"))
     save(activity.window.decorView, 1100, if (live) "main-live-failed.png" else "main-failed.png")
+    // The outage place dialog, opened by long-pressing the outage list.
+    MainActivity::class.java.getDeclaredMethod("showOutageSettings").apply { isAccessible = true }.invoke(activity)
+    org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle()
+    saveDialog(org.robolectric.shadows.ShadowDialog.getLatestDialog(), if (live) "outage-live.png" else "outage.png")
   }
 
 
@@ -162,6 +166,22 @@ class ScreenshotTest
   // Reports whether the outage download has finished (its status is no longer the loading text).
   private fun outagesDone(activity: MainActivity): Boolean =
     MainActivity::class.java.getDeclaredField("outageStatus").apply { isAccessible = true }.get(activity) != "Loading…"
+
+
+  // Renders dialog's window at 1000 px wide and writes it to SHOT_DIR/name.
+  private fun saveDialog(dialog: android.app.Dialog, name: String)
+  {
+    val root = dialog.window!!.decorView
+    val spec = android.view.View.MeasureSpec.makeMeasureSpec(1000, android.view.View.MeasureSpec.EXACTLY)
+    val bitmap: Bitmap
+
+    root.measure(spec, android.view.View.MeasureSpec.makeMeasureSpec(0, android.view.View.MeasureSpec.UNSPECIFIED))
+    root.layout(0, 0, 1000, root.measuredHeight)
+    bitmap = Bitmap.createBitmap(1000, root.measuredHeight, Bitmap.Config.ARGB_8888)
+    root.draw(Canvas(bitmap))
+    File(SHOT_DIR).mkdirs()
+    File(SHOT_DIR, name).outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
+  }
 
 
   // Lays out root 1080 px wide and heightPx tall (0 means as tall as its content), draws it, and saves a PNG.

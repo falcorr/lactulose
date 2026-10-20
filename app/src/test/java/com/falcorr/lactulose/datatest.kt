@@ -168,4 +168,27 @@ class DataTest
     assertEquals("PK", String(file.readBytes().copyOf(2)))
     file.delete()
   }
+
+
+  @Test
+  fun blursPointBy50To100Metres()
+  {
+    val random = kotlin.random.Random(7)
+    val bearings = HashSet<Int>()
+
+    // BoM's Dubbo point, moved many times: always 50 to 100 m away (great-circle distance), in all directions.
+    for (i in 0 until 500)
+    {
+      val moved = com.falcorr.lactulose.core.blurPoint(-32.2202, 148.5736, random)
+      val dLat = Math.toRadians(moved.first + 32.2202)
+      val dLon = Math.toRadians(moved.second - 148.5736)
+      val a = Math.pow(Math.sin(dLat / 2), 2.0) +
+        Math.cos(Math.toRadians(-32.2202)) * Math.cos(Math.toRadians(moved.first)) * Math.pow(Math.sin(dLon / 2), 2.0)
+      val metres = 2 * 6_371_000.0 * Math.asin(Math.sqrt(a))
+
+      assertTrue("moved $metres m", metres in 49.5..100.5)
+      bearings.add(((Math.toDegrees(Math.atan2(dLon * Math.cos(Math.toRadians(-32.2202)), dLat)) + 360) % 360 / 45).toInt())
+    }
+    assertEquals(8, bearings.size)
+  }
 }
